@@ -2,9 +2,10 @@
 build:
     go build -o bin/magd ./cmd/magd
 
-# Build, then start the REPL
-run: build
-    ./bin/magd
+# Build, then run. Pass a file to execute it: `just run script.magd`.
+# With no arguments, starts the REPL.
+run *args: build
+    ./bin/magd {{args}}
 
 # Run all tests
 test *args:
