@@ -8,14 +8,16 @@ import (
 	"io"
 	"os"
 	"os/user"
+
+	"magd/internal/lexer"
 )
 
 // Exit codes follow sysexits.h, so a shell can tell a usage mistake apart
 // from a bad script.
 const (
 	exitOK    = 0
-	exitUsage = 64 // EX_USAGE
-	exitData  = 65 // EX_DATAERR
+	exitUsage = 64 // EX_USAGE an Error caused by misuse of the user
+	exitData  = 65 // EX_DATAERR an Error caused by invalid data
 )
 
 // usage prints help text. The caller decides the exit code, so -h and a bad
@@ -36,8 +38,20 @@ Examples:
 
 func run(source string) bool {
 	// TODO: remove this Debug Print
-	fmt.Println(source)
+	// fmt.Println(source)
+	l := lexer.NewLexer(source)
 
+	tokens := l.ScanTokens()
+
+	for _, t := range tokens {
+		fmt.Println(t)
+	}
+
+	errs := l.Errors()
+
+	for _, e := range errs {
+		fmt.Println(e)
+	}
 	return true
 }
 
@@ -52,6 +66,8 @@ func runFile(path string) {
 		os.Exit(exitData)
 	}
 }
+
+// TODO: migrate the REPL into it's own REPL package
 
 func runPrompt() {
 	scanner := bufio.NewScanner(os.Stdin)
