@@ -125,9 +125,10 @@ func (t Token) String() string {
 		literalStr = fmt.Sprintf("literal: %#v, ", t.Literal)
 	}
 
+	tt, _ := TokenTypeStringMap[t.Type]
 	return fmt.Sprintf(
 		"Token{type: %v, Lexeme: %q, %sLine: %d}",
-		t.Type,
+		tt,
 		t.Lexeme,
 		literalStr,
 		t.Line,
