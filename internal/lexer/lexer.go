@@ -139,6 +139,8 @@ func (l *Lexer) scanToken() {
 			for l.lookahead() != '\n' && !l.isAtEnd() {
 				l.advance()
 			}
+		} else if l.matchNextCharacter('*') {
+			l.handleMultiLineComment()
 		} else {
 			l.addToken(token.SLASH)
 		}
@@ -235,6 +237,28 @@ func (l *Lexer) handleNumber() {
 	}
 
 	l.addTokenWithLiteral(token.NUMBER, value)
+}
+
+func (l *Lexer) handleMultiLineComment() {
+	for {
+		if l.isAtEnd() {
+			// unclosed multi-line comment
+			l.errors = append(l.errors, *lang.NewSyntaxError(l.line, nil, "Unterminated block comment"))
+			return
+		}
+
+		if l.lookahead() == '*' && l.lookaheadNext() == '/' {
+			l.advance() // skip *
+			l.advance() // skip /
+			return
+		}
+
+		if l.lookahead() == '\n' {
+			l.line += 1
+		}
+
+		l.advance()
+	}
 }
 
 func (l *Lexer) matchNextCharacter(expected rune) bool {
