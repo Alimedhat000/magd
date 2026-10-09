@@ -9,7 +9,9 @@ import (
 	"os"
 	"os/user"
 
+	"magd/internal/ast"
 	"magd/internal/lexer"
+	"magd/internal/parser"
 )
 
 // Exit codes follow sysexits.h, so a shell can tell a usage mistake apart
@@ -37,21 +39,39 @@ Examples:
 }
 
 func run(source string) bool {
-	// TODO: remove this Debug Print
-	// fmt.Println(source)
 	l := lexer.NewLexer(source)
-
 	tokens := l.ScanTokens()
 
-	for _, t := range tokens {
-		fmt.Println(t)
+	if errs := l.Errors(); len(errs) > 0 {
+		for _, e := range errs {
+			fmt.Fprintln(os.Stderr, e)
+		}
+		return false
 	}
 
-	errs := l.Errors()
-
-	for _, e := range errs {
-		fmt.Println(e)
+	p := parser.NewParser(tokens)
+	expression, err := p.Parse()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return false
 	}
+
+	// Parse recovers from syntax errors and records them instead of
+	// returning one, so the real diagnostics live in Errors().
+	if errs := p.Errors(); len(errs) > 0 {
+		for _, e := range errs {
+			fmt.Fprintln(os.Stderr, e)
+		}
+		return false
+	}
+
+	printed, err := (&ast.Printer{}).Print(expression)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "internal error:", err)
+		return false
+	}
+
+	fmt.Println(printed)
 	return true
 }
 
