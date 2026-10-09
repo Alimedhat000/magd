@@ -202,9 +202,6 @@ func TestLiterals(t *testing.T) {
 		{"false", "false"},
 		{"nil", "nil"},
 
-		// A number followed by an identifier boundary.
-		{"1a", "1"},
-
 		// Whitespace between everything changes nothing.
 		{"  1  ", "1"},
 		{"\n1\n", "1"},
@@ -234,6 +231,14 @@ func TestSyntaxErrors(t *testing.T) {
 		{"lone semicolon", ";"},
 		{"bare operator", "*"},
 		{"only whitespace", "   "},
+
+		// Trailing tokens the grammar never consumed. Without the
+		// end-of-parse check these parse as the leading expression and
+		// silently discard the rest.
+		{"trailing number", "1 2"},
+		{"trailing identifier", "1 a"},
+		{"trailing colon", "1 : 2"},
+		{"trailing closing brace", "1 }"},
 	}
 
 	for _, tt := range tests {

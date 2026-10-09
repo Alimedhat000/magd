@@ -22,6 +22,7 @@ type Visitor interface {
 	VisitUnaryExpression(expr *UnaryExpression) (any, error)
 	VisitGroupingExpression(expr *GroupingExpression) (any, error)
 	VisitLiteralExpression(expr *LiteralExpression) (any, error)
+	VisitConditionalExpression(expr *ConditionalExpression) (any, error)
 }
 
 type BinaryExpression struct {
@@ -37,6 +38,14 @@ type UnaryExpression struct {
 
 type GroupingExpression struct {
 	Expr Expression
+}
+
+type ConditionalExpression struct {
+	Condition    Expression
+	QuestionMark token.Token
+	Consequent   Expression
+	Colon        token.Token
+	Alternative  Expression
 }
 
 type LiteralExpression struct {
@@ -57,4 +66,8 @@ func (expr *LiteralExpression) Accept(visitor Visitor) (any, error) {
 
 func (expr *GroupingExpression) Accept(visitor Visitor) (any, error) {
 	return visitor.VisitGroupingExpression(expr)
+}
+
+func (expr *ConditionalExpression) Accept(visitor Visitor) (any, error) {
+	return visitor.VisitConditionalExpression(expr)
 }

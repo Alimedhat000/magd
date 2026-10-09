@@ -37,6 +37,8 @@ func TestSingleCharacterTokens(t *testing.T) {
 		'-': token.MINUS,
 		'+': token.PLUS,
 		';': token.SEMICOLON,
+		'?': token.QUESTION,
+		':': token.COLON,
 		'*': token.STAR,
 	}
 

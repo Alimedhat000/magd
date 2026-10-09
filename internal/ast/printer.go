@@ -27,6 +27,10 @@ func (p *Printer) VisitGroupingExpression(expr *GroupingExpression) (any, error)
 	return p.parenthesize("group", expr.Expr)
 }
 
+func (p *Printer) VisitConditionalExpression(expr *ConditionalExpression) (any, error) {
+	return p.parenthesize("?", expr.Condition, expr.Consequent, expr.Alternative)
+}
+
 func (p *Printer) VisitLiteralExpression(expr *LiteralExpression) (any, error) {
 	if expr.Value == nil {
 		return "nil", nil

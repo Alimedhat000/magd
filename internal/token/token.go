@@ -34,6 +34,8 @@ const (
 	// Delimiters
 	COMMA
 	SEMICOLON
+	QUESTION
+	COLON
 	LEFTPAREN
 	RIGHTPAREN
 	LEFTBRACE
@@ -92,6 +94,8 @@ var TokenTypeStringMap = map[TokenType]string{
 	RIGHTPAREN: ")",
 	LEFTBRACE:  "{",
 	RIGHTBRACE: "}",
+	QUESTION:   "?",
+	COLON:      ":",
 
 	// Keywords
 	LET:      "LET",
@@ -109,6 +113,14 @@ var TokenTypeStringMap = map[TokenType]string{
 	OR:       "OR",
 	NIL:      "NIL",
 	PRINT:    "PRINT",
+}
+
+var BinaryOperators = map[TokenType]bool{
+	PLUS: true, MINUS: true,
+	STAR: true, SLASH: true,
+	EQUALEQUAL: true, BANGEQUAL: true,
+	LESS: true, LESSEQUAL: true,
+	GREATER: true, GREATEREQUAL: true,
 }
 
 type Token struct {

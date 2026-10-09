@@ -14,7 +14,8 @@ import (
 // Here's the grammar directly from the book
 // https://craftinginterpreters.com/parsing-expressions.html
 //
-// expression     → equality ;
+// expression     → ternary ;
+// ternary        → equality (? expression : ternary)? ; The alternative '?' recurses rather than looping, making it right-associative.
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 // comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 // term           → factor ( ( "-" | "+" ) factor )* ;
@@ -58,7 +59,14 @@ func (p *Parser) Parse() (ast.Expression, error) {
 		}
 	}()
 
-	return p.expression(), nil
+	expr := p.expression()
+
+	if !p.isAtEnd() {
+		raise := p.error(p.peek(), "Expect expression.")
+		panic(raise)
+	}
+
+	return expr, nil
 }
 
 func (p *Parser) error(t token.Token, message string) parseError {
@@ -67,7 +75,30 @@ func (p *Parser) error(t token.Token, message string) parseError {
 }
 
 func (p *Parser) expression() ast.Expression {
-	return p.equality()
+	return p.ternary()
+}
+
+func (p *Parser) ternary() ast.Expression {
+	expr := p.equality()
+
+	if p.match(token.QUESTION) {
+		questionMark := p.previous()
+		consequent := p.expression()
+
+		colon := p.consume(token.COLON, "Expect ':' after '?'.")
+
+		alternative := p.ternary() // right-associative
+
+		return &ast.ConditionalExpression{
+			Condition:    expr,
+			QuestionMark: questionMark,
+			Consequent:   consequent,
+			Colon:        colon,
+			Alternative:  alternative,
+		}
+	}
+
+	return expr
 }
 
 func (p *Parser) equality() ast.Expression {
@@ -198,6 +229,12 @@ func (p *Parser) primary() ast.Expression {
 		default: // comparison and equality operators
 			p.comparison()
 		}
+		return nil
+	}
+
+	if p.peek().Type == token.COLON {
+		colon := p.advance() // this IS the colon
+		_ = p.error(colon, "Missing ternary question mark.")
 		return nil
 	}
 

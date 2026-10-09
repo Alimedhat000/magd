@@ -103,6 +103,10 @@ func (l *Lexer) scanToken() {
 		l.addToken(token.SEMICOLON)
 	case '*':
 		l.addToken(token.STAR)
+	case ':':
+		l.addToken(token.COLON)
+	case '?':
+		l.addToken(token.QUESTION)
 
 	case '!':
 		if l.matchNextCharacter('=') {

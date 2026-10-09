@@ -114,6 +114,11 @@ type recordingVisitor struct {
 	called string
 }
 
+func (v *recordingVisitor) VisitConditionalExpression(expr *ConditionalExpression) (any, error) {
+	v.called = "conditional"
+	return nil, nil
+}
+
 func (v *recordingVisitor) VisitBinaryExpression(expr *BinaryExpression) (any, error) {
 	v.called = "binary"
 	return nil, nil
@@ -144,6 +149,7 @@ func TestAcceptDispatchesToMatchingVisitMethod(t *testing.T) {
 		{"unary", &UnaryExpression{}, "unary"},
 		{"grouping", &GroupingExpression{}, "grouping"},
 		{"literal", &LiteralExpression{}, "literal"},
+		{"conditional", &ConditionalExpression{}, "conditional"},
 	}
 
 	for _, tt := range tests {
