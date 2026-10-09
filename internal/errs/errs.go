@@ -23,7 +23,7 @@ func NewSyntaxError(line int, lexeme, message string) *SyntaxError {
 	}
 }
 
-func (e *SyntaxError) Error() string {
+func (e SyntaxError) Error() string {
 	if e.lexeme == "" {
 		return fmt.Sprintf("syntax error on line %d at end: %s", e.line, e.message)
 	}
