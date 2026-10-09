@@ -254,7 +254,13 @@ func TestErrorMessages(t *testing.T) {
 		},
 		{
 			source: "+ 1",
-			want:   "syntax error on line 0 at '+': Expect expression.",
+			want:   "syntax error on line 0 at '+': Missing left-hand operand.",
+		},
+		{
+			// Not a binary operator, so the catch-all handles it. The lexer
+			// also flags '@', so @ 1 is two independent problems.
+			source: "@ 1",
+			want:   "syntax error on line 0 at '@': Expect expression.",
 		},
 	}
 

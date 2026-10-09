@@ -22,6 +22,9 @@ import (
 // unary          → ( "!" | "-" ) unary | primary ;
 // primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
 
+// TODO: add support for the comma operator like in comparison
+// TODO: add support for ternary operator
+
 // parseError unwinds recursive descent to Parse. It carries no information:
 // the actual error is recorded in Parser.errors before panicking.
 type parseError struct{}
@@ -163,6 +166,39 @@ func (p *Parser) primary() ast.Expression {
 		// we must have a closing parenthesis after the expression
 		p.consume(token.RIGHTPAREN, "Expect ')' after expression.")
 		return &ast.GroupingExpression{Expr: expr}
+	}
+
+	// How we get here: when the parser needs an expression it walks the whole
+	// precedence chain — equality → comparison → term → factor → unary →
+	// primary. Each rule checks whether the current token is an operator it
+	// handles and loops if so, otherwise passes down. Every rule that hands
+	// off has consumed nothing, so if we arrive at primary() on a token that
+	// isn't a literal or "(", it means the chain descended without consuming
+	// anything: there was no left-hand operand to bind that operator to.
+	//
+	// Nothing actually failed on the way down. term() matched "+" and entered
+	// its loop correctly; it just had no left side to build from. The input
+	// doesn't match the grammar — so this is a grammar-level problem, not a
+	// broken rule.
+	//
+	// Because we now know the token is specifically a binary operator, we can
+	// report it precisely and keep parsing.
+	// That way the rest of the expression still reports its own
+	// errors instead of being swallowed by this one.
+	if token.BinaryOperators[p.peek().Type] {
+		operator := p.advance()
+
+		_ = p.error(operator, "Missing left-hand operand.")
+
+		switch operator.Type {
+		case token.PLUS, token.MINUS:
+			p.factor()
+		case token.STAR, token.SLASH:
+			p.unary()
+		default: // comparison and equality operators
+			p.comparison()
+		}
+		return nil
 	}
 
 	// Nothing here can start an expression.
