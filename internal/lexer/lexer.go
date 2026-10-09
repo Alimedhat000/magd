@@ -6,7 +6,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"magd/internal/lang"
+	"magd/internal/errs"
 	"magd/internal/token"
 )
 
@@ -39,7 +39,7 @@ type Lexer struct {
 	lexemStart   int
 	lexemCurrent int
 	line         int
-	errors       []lang.SyntaxError
+	errors       []errs.SyntaxError
 }
 
 func NewLexer(source string) *Lexer {
@@ -48,7 +48,7 @@ func NewLexer(source string) *Lexer {
 	}
 }
 
-func (l *Lexer) Errors() []lang.SyntaxError {
+func (l *Lexer) Errors() []errs.SyntaxError {
 	return l.errors
 }
 
@@ -161,7 +161,7 @@ func (l *Lexer) scanToken() {
 			l.handleIdentifier()
 		} else {
 			// we keep scanning. there may be other errors later in the program
-			l.errors = append(l.errors, *lang.NewSyntaxError(l.line, nil, "Unexpexted character"))
+			l.errors = append(l.errors, *errs.NewSyntaxError(l.line, string(char), "Unexpected character"))
 			l.addToken(token.ILLEGAL)
 		}
 	}
@@ -192,7 +192,7 @@ func (l *Lexer) handleString() {
 		// no closing quote to skip, so only trim the opening one
 		l.addTokenWithLiteral(token.STRING, l.source[l.lexemStart+1:l.lexemCurrent])
 
-		l.errors = append(l.errors, *lang.NewSyntaxError(l.line, nil, "Unterminated string"))
+		l.errors = append(l.errors, *errs.NewSyntaxError(l.line, "", "Unterminated string"))
 		return
 	}
 
@@ -232,7 +232,7 @@ func (l *Lexer) handleNumber() {
 
 	value, err := strconv.ParseFloat(text, 64)
 	if err != nil {
-		l.errors = append(l.errors, *lang.NewSyntaxError(l.line, nil, err.Error()))
+		l.errors = append(l.errors, *errs.NewSyntaxError(l.line, text, err.Error()))
 		return
 	}
 
@@ -243,7 +243,7 @@ func (l *Lexer) handleMultiLineComment() {
 	for {
 		if l.isAtEnd() {
 			// unclosed multi-line comment
-			l.errors = append(l.errors, *lang.NewSyntaxError(l.line, nil, "Unterminated block comment"))
+			l.errors = append(l.errors, *errs.NewSyntaxError(l.line, "/*", "Unterminated block comment"))
 			return
 		}
 
