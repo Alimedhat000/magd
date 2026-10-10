@@ -24,7 +24,6 @@ import (
 // primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
 
 // TODO: add support for the comma operator like in comparison
-// TODO: add support for ternary operator
 
 // parseError unwinds recursive descent to Parse. It carries no information:
 // the actual error is recorded in Parser.errors before panicking.

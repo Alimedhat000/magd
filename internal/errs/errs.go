@@ -30,3 +30,21 @@ func (e SyntaxError) Error() string {
 
 	return fmt.Sprintf("syntax error on line %d at '%s': %s", e.line, e.lexeme, e.message)
 }
+
+type RuntimeError struct {
+	line    int
+	lexeme  string // the offending token's text, empty at end of input
+	message string
+}
+
+func NewRuntimeError(line int, lexeme, message string) *RuntimeError {
+	return &RuntimeError{
+		line:    line,
+		lexeme:  lexeme,
+		message: message,
+	}
+}
+
+func (e RuntimeError) Error() string {
+	return fmt.Sprintf("runtime error on line %d at '%s': %s", e.line, e.lexeme, e.message)
+}

@@ -10,6 +10,7 @@ import (
 	"os/user"
 
 	"magd/internal/ast"
+	"magd/internal/eval"
 	"magd/internal/lexer"
 	"magd/internal/parser"
 )
@@ -21,6 +22,8 @@ const (
 	exitUsage = 64 // EX_USAGE an Error caused by misuse of the user
 	exitData  = 65 // EX_DATAERR an Error caused by invalid data
 )
+
+const DEBUG = false
 
 // usage prints help text. The caller decides the exit code, so -h and a bad
 // flag can report differently.
@@ -65,13 +68,23 @@ func run(source string) bool {
 		return false
 	}
 
-	printed, err := (&ast.Printer{}).Print(expression)
+	value, err := (&eval.Evaluator{}).Eval(expression)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "internal error:", err)
+		fmt.Fprintln(os.Stderr, err)
 		return false
 	}
+	fmt.Println(eval.Stringify(value))
 
-	fmt.Println(printed)
+	if DEBUG {
+		printed, err := (&ast.Printer{}).Print(expression)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "internal error:", err)
+			return false
+		}
+
+		fmt.Println(printed)
+	}
+
 	return true
 }
 
