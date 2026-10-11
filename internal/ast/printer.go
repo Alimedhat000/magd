@@ -7,12 +7,24 @@ import (
 
 type Printer struct{}
 
-func (p *Printer) Print(expr Expression) (string, error) {
-	result, err := expr.Accept(p)
-	if err != nil {
-		return "", err
+var (
+	_ ExprVisitor = (*Printer)(nil)
+	_ StmtVisitor = (*Printer)(nil)
+)
+
+func (p *Printer) Print(stmts []Stmt) (string, error) {
+	var builder strings.Builder
+
+	for _, stmt := range stmts {
+		result, err := stmt.Accept(p)
+		if err != nil {
+			return "", err
+		}
+		builder.WriteString(result.(string))
+		builder.WriteString("\n")
 	}
-	return result.(string), nil
+
+	return builder.String(), nil
 }
 
 func (p *Printer) VisitBinaryExpression(expr *BinaryExpression) (any, error) {
@@ -38,6 +50,46 @@ func (p *Printer) VisitLiteralExpression(expr *LiteralExpression) (any, error) {
 	return fmt.Sprintf("%v", expr.Value), nil
 }
 
+func (p *Printer) VisitBlockStmt(stmt *BlockStmt) (any, error) {
+	var builder strings.Builder
+
+	builder.WriteString("{\n")
+
+	for _, inner := range stmt.Statements {
+		result, err := inner.Accept(p)
+		if err != nil {
+			return nil, err
+		}
+		builder.WriteString(result.(string))
+		builder.WriteString("\n")
+	}
+
+	builder.WriteString("}")
+
+	return builder.String(), nil
+}
+
+func (p *Printer) VisitVariableExpression(expr *VariableExpression) (any, error) {
+	return expr.Name.Lexeme, nil
+}
+
+func (p *Printer) VisitAssignmentExpression(expr *AssignmentExpression) (any, error) {
+	return p.parenthesize("=", &VariableExpression{Name: expr.Name}, expr.Value)
+}
+
+func (p *Printer) VisitVariableStmt(stmt *VariableStmt) (any, error) {
+	if stmt.Initializer == nil {
+		return "let " + stmt.Name.Lexeme + ";", nil
+	}
+
+	result, err := stmt.Initializer.Accept(p)
+	if err != nil {
+		return nil, err
+	}
+
+	return "let " + stmt.Name.Lexeme + " = " + result.(string) + ";", nil
+}
+
 func (p *Printer) parenthesize(name string, exprs ...Expression) (string, error) {
 	var builder strings.Builder
 
@@ -56,4 +108,20 @@ func (p *Printer) parenthesize(name string, exprs ...Expression) (string, error)
 
 	builder.WriteString(")")
 	return builder.String(), nil
+}
+
+func (p *Printer) VisitExpressionStmt(stmt *ExpressionStmt) (any, error) {
+	result, err := stmt.Expr.Accept(p)
+	if err != nil {
+		return nil, err
+	}
+	return result.(string) + ";", nil
+}
+
+func (p *Printer) VisitPrintStmt(stmt *PrintStmt) (any, error) {
+	result, err := stmt.Expr.Accept(p)
+	if err != nil {
+		return nil, err
+	}
+	return "print " + result.(string) + ";", nil
 }

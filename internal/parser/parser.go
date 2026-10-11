@@ -7,21 +7,30 @@ import (
 	"magd/internal/token"
 )
 
+// TODO: add better comments for each of the functions telling what it
+// does and what grammar it uses
+
 // This is a Recursive descent parser (which is the simplest way to build one)
 // it starts from the top/ outermost grammmar rule and works
 // it's way down into the nested subexpressions
 //
-// Here's the grammar directly from the book
-// https://craftinginterpreters.com/parsing-expressions.html
+// program        → declaration* EOF ;
+// declaration    → LetDecl | statement ;
+// statement      → exprStmt | printStmt | block ;
+// exprStmt       → expression ";" ;
+// printStmt      → "print" expression ";" ;
+// VariableDecl   → "let" IDENTIFIER ( "=" expression)? ";" ;
+// block          →  "{" declaration* "}";
 //
-// expression     → ternary ;
+// expression     → assignment ;
+// assignment     → IDENTIFIER "=" assignment | ternary ;
 // ternary        → equality (? expression : ternary)? ; The alternative '?' recurses rather than looping, making it right-associative.
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 // comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 // term           → factor ( ( "-" | "+" ) factor )* ;
 // factor         → unary ( ( "/" | "*" ) unary )* ;
 // unary          → ( "!" | "-" ) unary | primary ;
-// primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" ;
+// primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER ;
 
 // TODO: add support for the comma operator like in comparison
 
@@ -47,7 +56,7 @@ func (p *Parser) Errors() []errs.SyntaxError {
 // Parse parses a single expression. On a syntax error it recovers, records the
 // error, and returns nil. Synchronization waits until the grammar has
 // statements to resync on.
-func (p *Parser) Parse() (ast.Expression, error) {
+func (p *Parser) Parse() ([]ast.Stmt, error) {
 	defer func() {
 		r := recover()
 		if r == nil {
@@ -58,14 +67,14 @@ func (p *Parser) Parse() (ast.Expression, error) {
 		}
 	}()
 
-	expr := p.expression()
-
-	if !p.isAtEnd() {
-		raise := p.error(p.peek(), "Expect expression.")
-		panic(raise)
+	statements := []ast.Stmt{}
+	for !p.isAtEnd() {
+		if d := p.declaration(); d != nil {
+			statements = append(statements, d)
+		}
 	}
 
-	return expr, nil
+	return statements, nil
 }
 
 func (p *Parser) error(t token.Token, message string) parseError {
@@ -73,8 +82,107 @@ func (p *Parser) error(t token.Token, message string) parseError {
 	return parseError{}
 }
 
+func (p *Parser) declaration() (d ast.Stmt) {
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(parseError); !ok {
+				panic(r) // a real bug, not a syntax error
+			}
+			p.synchronize()
+			d = nil // caller skips it
+		}
+	}()
+
+	if p.match(token.LET) {
+		return p.varDeclaration()
+	}
+
+	return p.statement()
+}
+
+func (p *Parser) statement() ast.Stmt {
+	if p.match(token.PRINT) {
+		return p.printStatement()
+	}
+	if p.match(token.LEFTBRACE) {
+		return p.block()
+	}
+	return p.expressionStatement()
+}
+
+func (p *Parser) varDeclaration() ast.Stmt {
+	name := p.consume(token.IDENT, "Expect variable name.")
+
+	var initializer ast.Expression
+	if p.match(token.EQUAL) {
+		initializer = p.expression()
+	}
+
+	p.consume(token.SEMICOLON, "Expect ';' after variable declaration.")
+
+	return &ast.VariableStmt{Name: name, Initializer: initializer}
+}
+
+func (p *Parser) printStatement() ast.Stmt {
+	value := p.expression()
+	p.consume(token.SEMICOLON, "Expect ';' after value.")
+
+	return &ast.PrintStmt{Expr: value}
+}
+
+func (p *Parser) expressionStatement() ast.Stmt {
+	value := p.expression()
+	p.consume(token.SEMICOLON, "Expect ';' after expression.")
+
+	return &ast.ExpressionStmt{Expr: value}
+}
+
+// block parses a braced list of declarations and statements. The opening brace
+// is already consumed by statement().
+//
+// There is no error recovery inside a block, matching the book: once inside
+// braces, malformed input reports the error and unwinds out of the whole
+// block. Resyncing mid-block would silently drop statements.
+func (p *Parser) block() ast.Stmt {
+	var statements []ast.Stmt
+
+	for !p.check(token.RIGHTBRACE) && !p.isAtEnd() {
+		if d := p.declaration(); d != nil {
+			statements = append(statements, d)
+		}
+	}
+
+	p.consume(token.RIGHTBRACE, "Expect '}' after block.")
+
+	return &ast.BlockStmt{Statements: statements}
+}
+
 func (p *Parser) expression() ast.Expression {
-	return p.ternary()
+	return p.assignment()
+}
+
+func (p *Parser) assignment() ast.Expression {
+	expr := p.ternary()
+
+	if p.match(token.EQUAL) {
+		equals := p.previous()
+		value := p.assignment()
+
+		// Assignment's target must be a bare name. A grouping or a literal is
+		// a value, not somewhere to assign to.
+		target, ok := expr.(*ast.VariableExpression)
+		if !ok {
+			raise := p.error(equals, "Invalid assignment target.")
+			panic(raise)
+		}
+
+		return &ast.AssignmentExpression{
+			Name:  target.Name,
+			Value: value,
+		}
+	}
+
+	return expr
 }
 
 func (p *Parser) ternary() ast.Expression {
@@ -191,6 +299,12 @@ func (p *Parser) primary() ast.Expression {
 		return &ast.LiteralExpression{Value: p.previous().Literal}
 	}
 
+	if p.match(token.IDENT) {
+		return &ast.VariableExpression{
+			Name: p.previous(),
+		}
+	}
+
 	if p.match(token.LEFTPAREN) {
 		expr := p.expression()
 		// we must have a closing parenthesis after the expression
@@ -296,8 +410,8 @@ func (p *Parser) consume(t token.TokenType, message string) token.Token {
 		return p.advance()
 	}
 
-	p.error(p.peek(), message)
-	return token.Token{}
+	raise := p.error(p.peek(), message)
+	panic(raise)
 }
 
 func (p *Parser) isAtEnd() bool {

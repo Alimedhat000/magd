@@ -7,22 +7,29 @@ package ast
 // no single phase owns them.
 //
 // Instead of adding a method per operation to every node, each node has one
-// Accept method that dispatches to a Visitor. Each operation — AstPrinter,
-// Evaluator — implements Visitor with one method per node type. Adding a new
-// operation means writing a new type, not editing these nodes.
+// Accept method that dispatches to a visitor. Each operation — AstPrinter,
+// Evaluator — implements one visitor interface per hierarchy with a method per
+// node type. Adding a new operation means writing a new type, not editing
+// these nodes.
+//
+// Expressions and statements are separate hierarchies because they are
+// consumed separately: expressions produce values, statements do not. Each has
+// its own Accept and visitor interface.
 
 import "magd/internal/token"
 
 type Expression interface {
-	Accept(visitor Visitor) (any, error)
+	Accept(visitor ExprVisitor) (any, error)
 }
 
-type Visitor interface {
+type ExprVisitor interface {
 	VisitBinaryExpression(expr *BinaryExpression) (any, error)
 	VisitUnaryExpression(expr *UnaryExpression) (any, error)
 	VisitGroupingExpression(expr *GroupingExpression) (any, error)
 	VisitLiteralExpression(expr *LiteralExpression) (any, error)
 	VisitConditionalExpression(expr *ConditionalExpression) (any, error)
+	VisitVariableExpression(expr *VariableExpression) (any, error)
+	VisitAssignmentExpression(expr *AssignmentExpression) (any, error)
 }
 
 type BinaryExpression struct {
@@ -52,22 +59,39 @@ type LiteralExpression struct {
 	Value any // this could have any literal value NUMBER | STRING | TRUE | FALSE | NIL
 }
 
-func (expr *BinaryExpression) Accept(visitor Visitor) (any, error) {
+type VariableExpression struct {
+	Name token.Token
+}
+
+type AssignmentExpression struct {
+	Name  token.Token
+	Value Expression
+}
+
+func (expr *VariableExpression) Accept(visitor ExprVisitor) (any, error) {
+	return visitor.VisitVariableExpression(expr)
+}
+
+func (expr *BinaryExpression) Accept(visitor ExprVisitor) (any, error) {
 	return visitor.VisitBinaryExpression(expr)
 }
 
-func (expr *UnaryExpression) Accept(visitor Visitor) (any, error) {
+func (expr *UnaryExpression) Accept(visitor ExprVisitor) (any, error) {
 	return visitor.VisitUnaryExpression(expr)
 }
 
-func (expr *LiteralExpression) Accept(visitor Visitor) (any, error) {
+func (expr *LiteralExpression) Accept(visitor ExprVisitor) (any, error) {
 	return visitor.VisitLiteralExpression(expr)
 }
 
-func (expr *GroupingExpression) Accept(visitor Visitor) (any, error) {
+func (expr *GroupingExpression) Accept(visitor ExprVisitor) (any, error) {
 	return visitor.VisitGroupingExpression(expr)
 }
 
-func (expr *ConditionalExpression) Accept(visitor Visitor) (any, error) {
+func (expr *ConditionalExpression) Accept(visitor ExprVisitor) (any, error) {
 	return visitor.VisitConditionalExpression(expr)
+}
+
+func (expr *AssignmentExpression) Accept(visitor ExprVisitor) (any, error) {
+	return visitor.VisitAssignmentExpression(expr)
 }

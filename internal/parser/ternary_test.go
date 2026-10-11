@@ -1,12 +1,26 @@
 package parser
 
 import (
+	"strings"
 	"testing"
 
 	"magd/internal/ast"
 	"magd/internal/lexer"
 	"magd/internal/token"
 )
+
+// parseStr prints a bare ternary expression, supplying the semicolon the
+// parser requires and trimming the ";\n" Print appends.
+func parseStr(t *testing.T, source string) string {
+	t.Helper()
+
+	printed, err := (&ast.Printer{}).Print([]ast.Stmt{&ast.ExpressionStmt{Expr: parseOneExpr(t, source)}})
+	if err != nil {
+		t.Fatalf("Print() error = %v", err)
+	}
+
+	return strings.TrimSuffix(printed, ";\n")
+}
 
 func TestTernary(t *testing.T) {
 	tests := []struct {
@@ -66,19 +80,7 @@ func TestTernary(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.source, func(t *testing.T) {
-			tokens := lexer.NewLexer(tt.source).ScanTokens()
-			p := NewParser(tokens)
-
-			expr, _ := p.Parse()
-			if errs := p.Errors(); len(errs) != 0 {
-				t.Fatalf("parse(%q): unexpected errors: %v", tt.source, errs)
-			}
-
-			got, err := (&ast.Printer{}).Print(expr)
-			if err != nil {
-				t.Fatalf("Print() error = %v", err)
-			}
-			if got != tt.want {
+			if got := parseStr(t, tt.source); got != tt.want {
 				t.Errorf("parse(%q)\nwant: %s\ngot:  %s", tt.source, tt.want, got)
 			}
 		})
@@ -134,9 +136,12 @@ func TestTernaryAcrossLines(t *testing.T) {
 		line   int // line the error is expected on
 	}{
 		{
+			// Now that programs are statements, the trailing 4 is a missing
+			// semicolon rather than a dangling expression. Either way it is a
+			// syntax error pointing at line 1.
 			name:   "condition on first line, error on second",
 			source: "1 ? 2 : 3\n4",
-			want:   "syntax error on line 1 at '4': Expect expression.",
+			want:   "syntax error on line 1 at '4': Expect ';' after expression.",
 			line:   1,
 		},
 		{
@@ -159,18 +164,22 @@ func TestTernaryAcrossLines(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tokens := lexer.NewLexer(tt.source).ScanTokens()
+			// Same semicolon fixup parseOneExpr applies, so the parser sees a
+			// complete statement and any error is the one under test rather
+			// than a spurious "Expect ';'".
+			trimmed := strings.TrimRight(tt.source, " \t\n")
+			if !strings.HasSuffix(trimmed, ";") {
+				trimmed += ";"
+			}
+
+			tokens := lexer.NewLexer(trimmed).ScanTokens()
 			p := NewParser(tokens)
 
-			expr, _ := p.Parse()
+			_, _ = p.Parse()
 			errs := p.Errors()
 
 			if tt.line == 0 && len(errs) == 0 {
-				got, err := (&ast.Printer{}).Print(expr)
-				if err != nil {
-					t.Fatalf("Print() error = %v", err)
-				}
-				if got != tt.want {
+				if got := parseStr(t, tt.source); got != tt.want {
 					t.Errorf("parse(%q)\nwant: %s\ngot:  %s", tt.source, tt.want, got)
 				}
 				return
@@ -252,19 +261,7 @@ func TestTernaryDidNotChangeOtherPrecedence(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.source, func(t *testing.T) {
-			tokens := lexer.NewLexer(tt.source).ScanTokens()
-			p := NewParser(tokens)
-
-			expr, _ := p.Parse()
-			if errs := p.Errors(); len(errs) != 0 {
-				t.Fatalf("parse(%q): unexpected errors: %v", tt.source, errs)
-			}
-
-			got, err := (&ast.Printer{}).Print(expr)
-			if err != nil {
-				t.Fatalf("Print() error = %v", err)
-			}
-			if got != tt.want {
+			if got := parseStr(t, tt.source); got != tt.want {
 				t.Errorf("parse(%q)\nwant: %s\ngot:  %s", tt.source, tt.want, got)
 			}
 		})

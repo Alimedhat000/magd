@@ -53,7 +53,7 @@ func run(source string) bool {
 	}
 
 	p := parser.NewParser(tokens)
-	expression, err := p.Parse()
+	statements, err := p.Parse()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "internal error:", err)
 		return false
@@ -67,16 +67,13 @@ func run(source string) bool {
 		}
 		return false
 	}
-
-	value, err := (&eval.Evaluator{}).Eval(expression)
-	if err != nil {
+	if err := eval.NewEvaluator().Eval(statements); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return false
 	}
-	fmt.Println(eval.Stringify(value))
 
 	if DEBUG {
-		printed, err := (&ast.Printer{}).Print(expression)
+		printed, err := (&ast.Printer{}).Print(statements)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "internal error:", err)
 			return false

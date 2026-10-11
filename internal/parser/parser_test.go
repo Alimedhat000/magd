@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"magd/internal/ast"
@@ -9,13 +11,45 @@ import (
 
 // parse lexes and parses source, returning the printed AST. It fails the test
 // if any syntax error is reported.
+//
+// The parser takes statements, so the semicolon is appended here. Tests below
+// are about expression precedence, not statement syntax, so they spell their
+// input as bare expressions and let this helper terminate it.
 func parse(t *testing.T, source string) string {
 	t.Helper()
+
+	printed, err := (&ast.Printer{}).Print([]ast.Stmt{&ast.ExpressionStmt{Expr: parseOneExpr(t, source)}})
+	if err != nil {
+		t.Fatalf("Print() error = %v", err)
+	}
+
+	// Print renders each statement as "<expr>;\n"; these tests want just the
+	// expression, so trim the terminator back off.
+	return strings.TrimSuffix(printed, ";\n")
+}
+
+// parseOneExpr parses a bare expression into an ast.Expression, supplying the
+// semicolon the parser requires.
+//
+// The semicolon goes on the source's last line — appending it at the very end
+// would put it after a trailing newline, shifting the line number in the
+// error messages that tests below assert on.
+//
+// Safety: this appends a semicolon, so it must never be used by a test whose
+// point is a missing semicolon. Tests about missing tokens call parseErrors,
+// which lexes the source untouched.
+func parseOneExpr(t *testing.T, source string) ast.Expression {
+	t.Helper()
+
+	trimmed := strings.TrimRight(source, " \t\n")
+	if !strings.HasSuffix(trimmed, ";") {
+		source = trimmed + ";"
+	}
 
 	tokens := lexer.NewLexer(source).ScanTokens()
 	p := NewParser(tokens)
 
-	expr, err := p.Parse()
+	stmts, err := p.Parse()
 	if err != nil {
 		t.Fatalf("Parse() error = %v", err)
 	}
@@ -23,12 +57,16 @@ func parse(t *testing.T, source string) string {
 		t.Fatalf("parse(%q): unexpected errors: %v", source, errs)
 	}
 
-	printed, err := (&ast.Printer{}).Print(expr)
-	if err != nil {
-		t.Fatalf("Print() error = %v", err)
+	if len(stmts) != 1 {
+		t.Fatalf("parse(%q): want 1 statement, got %d", source, len(stmts))
 	}
 
-	return printed
+	stmt, ok := stmts[0].(*ast.ExpressionStmt)
+	if !ok {
+		t.Fatalf("parse(%q): want *ast.ExpressionStmt, got %T", source, stmts[0])
+	}
+
+	return stmt.Expr
 }
 
 // parseErrors parses source expecting it to fail, returning the errors found.
@@ -230,7 +268,6 @@ func TestSyntaxErrors(t *testing.T) {
 		{"leading binary operator", "+ 1"},
 		{"lone semicolon", ";"},
 		{"bare operator", "*"},
-		{"only whitespace", "   "},
 
 		// Trailing tokens the grammar never consumed. Without the
 		// end-of-parse check these parse as the leading expression and
@@ -317,16 +354,40 @@ func TestParserDoesNotCrashOnMalformedInput(t *testing.T) {
 	}
 }
 
-func TestParseReturnsNilOnSyntaxError(t *testing.T) {
+// An empty program is legal: whitespace lexes to nothing but EOF, so the
+// statement loop never runs and Parse returns an empty slice. This is what
+// makes a blank REPL line harmless rather than an error.
+func TestParseEmptyProgram(t *testing.T) {
+	for _, source := range []string{"", "   ", "\n\n"} {
+		t.Run(fmt.Sprintf("%q", source), func(t *testing.T) {
+			p := NewParser(lexer.NewLexer(source).ScanTokens())
+
+			stmts, err := p.Parse()
+			if err != nil {
+				t.Fatalf("Parse() error = %v", err)
+			}
+			if errs := p.Errors(); len(errs) != 0 {
+				t.Fatalf("parse(%q): unexpected errors: %v", source, errs)
+			}
+			if len(stmts) != 0 {
+				t.Errorf("parse(%q) = %#v, want no statements", source, stmts)
+			}
+		})
+	}
+}
+
+func TestParseRecoversAndRecordsErrors(t *testing.T) {
 	tokens := lexer.NewLexer("+ 1").ScanTokens()
 	p := NewParser(tokens)
 
-	expr, err := p.Parse()
+	stmts, err := p.Parse()
 	if err != nil {
 		t.Errorf("want nil error, got %v", err)
 	}
-	if expr != nil {
-		t.Errorf("want nil expression on syntax error, got %#v", expr)
+	// The bad statement is dropped, not returned: statement() recovers,
+	// synchronizes, and reports nil so Parse can skip it.
+	if len(stmts) != 0 {
+		t.Errorf("want no statements after a syntax error, got %#v", stmts)
 	}
 	if len(p.Errors()) == 0 {
 		t.Error("want the error recorded in Errors()")

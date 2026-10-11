@@ -7,18 +7,34 @@ import (
 	"strconv"
 
 	"magd/internal/ast"
+	"magd/internal/env"
 	"magd/internal/errs"
 	"magd/internal/token"
 )
 
-type Evaluator struct{}
+type Evaluator struct {
+	environment *env.Environment
+}
 
-// Eval evaluates expr and returns the resulting value.
+// Evaluator implements both visitor interfaces: statements are executed, and
+// the expressions they contain are evaluated.
+var (
+	_ ast.ExprVisitor = (*Evaluator)(nil)
+	_ ast.StmtVisitor = (*Evaluator)(nil)
+)
+
+func NewEvaluator() *Evaluator {
+	env := env.NewEnvironment()
+
+	return &Evaluator{environment: env}
+}
+
+// Eval executes a program. Statements produce no values, so there is nothing
+// to return — only errors.
 //
-// A runtime error deep inside the tree — say, 2 * (3 / -"muffin") — panics on
-// its way out of the recursive visits. Eval recovers it here and returns it as
-// an error, so the REPL stays alive and the user can type another line.
-func (e *Evaluator) Eval(expr ast.Expression) (result any, err error) {
+// The recover moved here from the expression path because it must now wrap the
+// whole loop: a runtime error in statement 3 stops the remaining ones.
+func (e *Evaluator) Eval(stmts []ast.Stmt) (err error) {
 	defer func() {
 		r := recover()
 		if r == nil {
@@ -30,10 +46,86 @@ func (e *Evaluator) Eval(expr ast.Expression) (result any, err error) {
 			panic(r) // a real bug, not a runtime error
 		}
 
-		result, err = nil, perr
+		err = perr
 	}()
 
-	return e.evaluate(expr)
+	for _, stmt := range stmts {
+		if err := e.Execute(stmt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (e *Evaluator) Execute(stmt ast.Stmt) error {
+	_, err := stmt.Accept(e)
+	return err
+}
+
+func (e *Evaluator) VisitBlockStmt(stmt *ast.BlockStmt) (any, error) {
+	previous := e.environment
+	e.environment = env.NewEnvironmentEnclosing(previous)
+
+	defer func() { e.environment = previous }()
+
+	for _, inner := range stmt.Statements {
+		if err := e.Execute(inner); err != nil {
+			return nil, err
+		}
+	}
+
+	return nil, nil
+}
+
+func (e *Evaluator) VisitExpressionStmt(stmt *ast.ExpressionStmt) (any, error) {
+	return e.evaluate(stmt.Expr)
+}
+
+func (e *Evaluator) VisitVariableStmt(stmt *ast.VariableStmt) (any, error) {
+	var value any
+
+	if stmt.Initializer != nil {
+		var err error
+		value, err = e.evaluate(stmt.Initializer)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	e.environment.Define(stmt.Name.Lexeme, value)
+
+	return nil, nil
+}
+
+func (e *Evaluator) VisitVariableExpression(expr *ast.VariableExpression) (any, error) {
+	value, err := e.environment.Get(expr.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	return value, nil
+}
+
+func (e *Evaluator) VisitAssignmentExpression(expr *ast.AssignmentExpression) (any, error) {
+	value, err := e.evaluate(expr.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = e.environment.Assign(expr.Name, value)
+	if err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+func (e *Evaluator) VisitPrintStmt(stmt *ast.PrintStmt) (any, error) {
+	val, err := e.evaluate(stmt.Expr)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(Stringify(val))
+	return nil, nil
 }
 
 func (e *Evaluator) VisitLiteralExpression(expr *ast.LiteralExpression) (any, error) {
