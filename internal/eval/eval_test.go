@@ -379,7 +379,7 @@ func TestRuntimeErrorReportsDeepestOperator(t *testing.T) {
 	}
 }
 
-// Once an error is recovered from, the evaluator must still work.
+// Once an error is returned, the evaluator must still work.
 func TestEvalRecoversAndStaysUsable(t *testing.T) {
 	e := NewEvaluator()
 
@@ -405,7 +405,7 @@ func TestEvalRecoversAndStaysUsable(t *testing.T) {
 }
 
 // A runtime error in one statement must prevent later statements from running:
-// Eval recovers at the loop, so execution stops rather than continuing.
+// Eval returns on the first error, so execution stops rather than continuing.
 func TestEvalStopsAtFirstError(t *testing.T) {
 	e := NewEvaluator()
 
@@ -489,10 +489,9 @@ func TestPrintStmtRuntimeErrorPrintsNothing(t *testing.T) {
 // captureOutput runs fn with os.Stdout redirected to a pipe and returns
 // everything written to it.
 //
-// VisitPrintStmt prints straight to os.Stdout via fmt.Println, so there is no
-// other way to observe what a print statement produced. The alternative —
-// injecting an io.Writer into Evaluator — would change production code to suit
-// tests; redirection confines the workaround to the test.
+// VisitPrintStmt writes to the evaluator's writer (os.Stdout by default).
+// These older tests predate NewEvaluatorTo and still redirect os.Stdout;
+// new tests should prefer a bytes.Buffer via NewEvaluatorTo.
 func captureOutput(t *testing.T, fn func()) string {
 	t.Helper()
 

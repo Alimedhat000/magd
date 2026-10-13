@@ -11,8 +11,8 @@ import (
 
 	"magd/internal/ast"
 	"magd/internal/eval"
-	"magd/internal/lexer"
-	"magd/internal/parser"
+	"magd/internal/interp"
+	"magd/internal/repl"
 )
 
 // Exit codes follow sysexits.h, so a shell can tell a usage mistake apart
@@ -42,26 +42,8 @@ Examples:
 }
 
 func run(source string) bool {
-	l := lexer.NewLexer(source)
-	tokens := l.ScanTokens()
-
-	if errs := l.Errors(); len(errs) > 0 {
-		for _, e := range errs {
-			fmt.Fprintln(os.Stderr, e)
-		}
-		return false
-	}
-
-	p := parser.NewParser(tokens)
-	statements, err := p.Parse()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "internal error:", err)
-		return false
-	}
-
-	// Parse recovers from syntax errors and records them instead of
-	// returning one, so the real diagnostics live in Errors().
-	if errs := p.Errors(); len(errs) > 0 {
+	statements, errs := interp.Compile(source)
+	if len(errs) > 0 {
 		for _, e := range errs {
 			fmt.Fprintln(os.Stderr, e)
 		}
@@ -97,17 +79,15 @@ func runFile(path string) {
 	}
 }
 
-// TODO: migrate the REPL into it's own REPL package
-
 func runPrompt() {
+	s := repl.NewSession(os.Stdout)
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		fmt.Fprintf(os.Stderr, "> ")
 		if !scanner.Scan() {
 			break
 		}
-		line := scanner.Text()
-		run(line)
+		s.Eval(scanner.Text())
 	}
 
 	err := scanner.Err()

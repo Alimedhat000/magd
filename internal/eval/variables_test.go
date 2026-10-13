@@ -272,10 +272,9 @@ func TestEmptyBlock(t *testing.T) {
 // outer scope. VisitBlockStmt restores with a defer, so an error unwinding
 // through it still restores.
 //
-// Undefined-variable is deliberately the error here: it returns normally from
-// VisitVariableExpression rather than panicking, so it exercises the error
-// *return* path out of VisitBlockStmt. A panic (like 1/0) unwinds through the
-// same defer and would pass even without it.
+// Undefined-variable is the error here; like every runtime error (including
+// 1/0, which returns an error rather than panicking) it exercises the error
+// *return* path out of VisitBlockStmt.
 func TestBlockScopeRestoredAfterError(t *testing.T) {
 	e := NewEvaluator()
 

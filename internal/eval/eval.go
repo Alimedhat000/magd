@@ -3,6 +3,8 @@ package eval
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"reflect"
 	"strconv"
 
@@ -14,6 +16,7 @@ import (
 
 type Evaluator struct {
 	environment *env.Environment
+	out         io.Writer
 }
 
 // Evaluator implements both visitor interfaces: statements are executed, and
@@ -24,37 +27,32 @@ var (
 )
 
 func NewEvaluator() *Evaluator {
-	env := env.NewEnvironment()
+	return &Evaluator{environment: env.NewEnvironment()}
+}
 
-	return &Evaluator{environment: env}
+// NewEvaluatorTo is NewEvaluator with the print destination overridden.
+// The REPL passes its own buffer. A nil writer means the current os.Stdout
+// at print time, so tests that redirect os.Stdout keep working.
+func NewEvaluatorTo(w io.Writer) *Evaluator {
+	return &Evaluator{environment: env.NewEnvironment(), out: w}
 }
 
 // Eval executes a program. Statements produce no values, so there is nothing
-// to return — only errors.
-//
-// The recover moved here from the expression path because it must now wrap the
-// whole loop: a runtime error in statement 3 stops the remaining ones.
-func (e *Evaluator) Eval(stmts []ast.Stmt) (err error) {
-	defer func() {
-		r := recover()
-		if r == nil {
-			return
-		}
-
-		perr, ok := r.(error)
-		if !ok {
-			panic(r) // a real bug, not a runtime error
-		}
-
-		err = perr
-	}()
-
+// to return — only errors. There is deliberately no recover here: runtime
+// errors are returned, so a panic is always a real bug and must crash.
+func (e *Evaluator) Eval(stmts []ast.Stmt) error {
 	for _, stmt := range stmts {
 		if err := e.Execute(stmt); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// EvalExpression evaluates a single expression and returns its value.
+// The REPL uses it to display bare expression statements.
+func (e *Evaluator) EvalExpression(expr ast.Expression) (any, error) {
+	return e.evaluate(expr)
 }
 
 func (e *Evaluator) Execute(stmt ast.Stmt) error {
@@ -124,7 +122,11 @@ func (e *Evaluator) VisitPrintStmt(stmt *ast.PrintStmt) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(Stringify(val))
+	out := e.out
+	if out == nil {
+		out = os.Stdout
+	}
+	fmt.Fprintln(out, Stringify(val))
 	return nil, nil
 }
 
