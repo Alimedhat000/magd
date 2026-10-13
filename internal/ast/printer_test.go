@@ -170,6 +170,21 @@ func (v *recordingVisitor) VisitAssignmentExpression(expr *AssignmentExpression)
 	return nil, nil
 }
 
+func (v *recordingVisitor) VisitLogicalExpression(expr *LogicalExpression) (any, error) {
+	v.called = "logical"
+	return nil, nil
+}
+
+func (v *recordingVisitor) VisitIfStmt(stmt *IfStmt) (any, error) {
+	v.called = "if"
+	return nil, nil
+}
+
+func (v *recordingVisitor) VisitWhileStmt(stmt *WhileStmt) (any, error) {
+	v.called = "while"
+	return nil, nil
+}
+
 func TestAcceptDispatchesToMatchingVisitMethod(t *testing.T) {
 	tests := []struct {
 		name string
@@ -183,6 +198,7 @@ func TestAcceptDispatchesToMatchingVisitMethod(t *testing.T) {
 		{"conditional", &ConditionalExpression{}, "conditional"},
 		{"variable", &VariableExpression{}, "variable"},
 		{"assignment", &AssignmentExpression{}, "assignment"},
+		{"logical", &LogicalExpression{}, "logical"},
 	}
 
 	for _, tt := range tests {
@@ -315,6 +331,8 @@ func TestAcceptDispatchesStatements(t *testing.T) {
 		{"printStmt", &PrintStmt{}, "printStmt"},
 		{"variableStmt", &VariableStmt{}, "variableStmt"},
 		{"blockStmt", &BlockStmt{}, "block"},
+		{"ifStmt", &IfStmt{}, "if"},
+		{"whileStmt", &WhileStmt{}, "while"},
 	}
 
 	for _, tt := range tests {
@@ -325,6 +343,124 @@ func TestAcceptDispatchesStatements(t *testing.T) {
 			}
 			if visitor.called != tt.want {
 				t.Errorf("Accept() routed to %q, want %q", visitor.called, tt.want)
+			}
+		})
+	}
+}
+
+// A logical operator prints like any other binary, using its own lexeme, so
+// precedence between and/or stays visible in the output.
+func TestPrintLogicalExpression(t *testing.T) {
+	tests := []struct {
+		name string
+		expr Expression
+		want string
+	}{
+		{"or", &LogicalExpression{
+			Left:     &VariableExpression{Name: token.Token{Type: token.IDENT, Lexeme: "a"}},
+			Operator: token.Token{Type: token.OR, Lexeme: "or"},
+			Right:    &VariableExpression{Name: token.Token{Type: token.IDENT, Lexeme: "b"}},
+		}, "(or a b);\n"},
+		{"and", &LogicalExpression{
+			Left:     &VariableExpression{Name: token.Token{Type: token.IDENT, Lexeme: "a"}},
+			Operator: token.Token{Type: token.AND, Lexeme: "and"},
+			Right:    &VariableExpression{Name: token.Token{Type: token.IDENT, Lexeme: "b"}},
+		}, "(and a b);\n"},
+		{"nested shows precedence", &LogicalExpression{
+			Left:     &VariableExpression{Name: token.Token{Type: token.IDENT, Lexeme: "a"}},
+			Operator: token.Token{Type: token.OR, Lexeme: "or"},
+			Right: &LogicalExpression{
+				Left:     &VariableExpression{Name: token.Token{Type: token.IDENT, Lexeme: "b"}},
+				Operator: token.Token{Type: token.AND, Lexeme: "and"},
+				Right:    &VariableExpression{Name: token.Token{Type: token.IDENT, Lexeme: "c"}},
+			},
+		}, "(or a (and b c));\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := (&Printer{}).Print([]Stmt{&ExpressionStmt{Expr: tt.expr}})
+			if err != nil {
+				t.Fatalf("Print() error = %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("Print() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPrintIfStmt(t *testing.T) {
+	cond := &LiteralExpression{Value: true}
+	then := &ExpressionStmt{Expr: &LiteralExpression{Value: float64(1)}}
+	els := &ExpressionStmt{Expr: &LiteralExpression{Value: float64(2)}}
+
+	tests := []struct {
+		name string
+		stmt Stmt
+		want string
+	}{
+		{"no else", &IfStmt{Condition: cond, ThenBranch: then}, "if (true) 1;\n"},
+		{"with else", &IfStmt{Condition: cond, ThenBranch: then, ElseBranch: els},
+			"if (true) 1; else 2;\n"},
+		{"compound condition", &IfStmt{
+			Condition: &BinaryExpression{
+				Left:     &VariableExpression{Name: token.Token{Type: token.IDENT, Lexeme: "x"}},
+				Operator: token.Token{Type: token.LESS, Lexeme: "<"},
+				Right:    &LiteralExpression{Value: float64(10)},
+			},
+			ThenBranch: then,
+		}, "if ((< x 10)) 1;\n"},
+		{"else if chains", &IfStmt{
+			Condition:  cond,
+			ThenBranch: then,
+			ElseBranch: &IfStmt{
+				Condition:  &LiteralExpression{Value: false},
+				ThenBranch: els,
+				ElseBranch: &ExpressionStmt{Expr: &LiteralExpression{Value: float64(3)}},
+			},
+		}, "if (true) 1; else if (false) 2; else 3;\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := (&Printer{}).Print([]Stmt{tt.stmt})
+			if err != nil {
+				t.Fatalf("Print() error = %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("Print() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPrintWhileStmt(t *testing.T) {
+	tests := []struct {
+		name string
+		stmt Stmt
+		want string
+	}{
+		{"expression body", &WhileStmt{
+			Condition: &VariableExpression{Name: token.Token{Type: token.IDENT, Lexeme: "done"}},
+			Body:      &ExpressionStmt{Expr: &LiteralExpression{Value: float64(1)}},
+		}, "while (done) 1;\n"},
+		{"block body", &WhileStmt{
+			Condition: &LiteralExpression{Value: true},
+			Body: &BlockStmt{Statements: []Stmt{
+				&PrintStmt{Expr: &LiteralExpression{Value: float64(2)}},
+			}},
+		}, "while (true) {\nprint 2;\n}\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := (&Printer{}).Print([]Stmt{tt.stmt})
+			if err != nil {
+				t.Fatalf("Print() error = %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("Print() = %q, want %q", got, tt.want)
 			}
 		})
 	}

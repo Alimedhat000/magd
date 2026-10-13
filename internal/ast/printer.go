@@ -43,6 +43,49 @@ func (p *Printer) VisitConditionalExpression(expr *ConditionalExpression) (any, 
 	return p.parenthesize("?", expr.Condition, expr.Consequent, expr.Alternative)
 }
 
+func (p *Printer) VisitLogicalExpression(expr *LogicalExpression) (any, error) {
+	return p.parenthesize(expr.Operator.Lexeme, expr.Left, expr.Right)
+}
+
+func (p *Printer) VisitIfStmt(stmt *IfStmt) (any, error) {
+	condition, err := p.printExpression(stmt.Condition)
+	if err != nil {
+		return nil, err
+	}
+
+	thenBranch, err := p.printStatement(stmt.ThenBranch)
+	if err != nil {
+		return nil, err
+	}
+
+	var builder strings.Builder
+	builder.WriteString("if (" + condition + ") " + thenBranch)
+
+	if stmt.ElseBranch != nil {
+		elseBranch, err := p.printStatement(stmt.ElseBranch)
+		if err != nil {
+			return nil, err
+		}
+		builder.WriteString(" else " + elseBranch)
+	}
+
+	return builder.String(), nil
+}
+
+func (p *Printer) VisitWhileStmt(stmt *WhileStmt) (any, error) {
+	condition, err := p.printExpression(stmt.Condition)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := p.printStatement(stmt.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return "while (" + condition + ") " + body, nil
+}
+
 func (p *Printer) VisitLiteralExpression(expr *LiteralExpression) (any, error) {
 	if expr.Value == nil {
 		return "nil", nil
@@ -98,16 +141,34 @@ func (p *Printer) parenthesize(name string, exprs ...Expression) (string, error)
 
 	for _, expr := range exprs {
 		builder.WriteString(" ")
-		result, err := expr.Accept(p)
+		result, err := p.printExpression(expr)
 		if err != nil {
 			return "", err
 		}
 
-		builder.WriteString(result.(string))
+		builder.WriteString(result)
 	}
 
 	builder.WriteString(")")
 	return builder.String(), nil
+}
+
+func (p *Printer) printExpression(expr Expression) (string, error) {
+	result, err := expr.Accept(p)
+	if err != nil {
+		return "", err
+	}
+
+	return result.(string), nil
+}
+
+func (p *Printer) printStatement(stmt Stmt) (string, error) {
+	result, err := stmt.Accept(p)
+	if err != nil {
+		return "", err
+	}
+
+	return result.(string), nil
 }
 
 func (p *Printer) VisitExpressionStmt(stmt *ExpressionStmt) (any, error) {

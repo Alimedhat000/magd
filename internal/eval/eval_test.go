@@ -27,12 +27,16 @@ func tokenForTest(lexeme string) token.Token {
 // tests are about a single expression's value. So this unwraps the one
 // ExpressionStmt the parser produced and evaluates its expression directly.
 // Statement-level behaviour is covered separately, via Eval.
+//
+// NewEvaluator, not the zero value: &Evaluator{} has a nil environment, so
+// any expression that resolves a variable dereferences nil and panics instead
+// of reporting an undefined-variable error.
 func evalSource(t *testing.T, source string) any {
 	t.Helper()
 
 	expr := parseOneExpression(t, source)
 
-	value, err := (&Evaluator{}).evaluate(expr)
+	value, err := NewEvaluator().evaluate(expr)
 	if err != nil {
 		t.Fatalf("eval(%q): unexpected error: %v", source, err)
 	}
@@ -46,7 +50,7 @@ func evalError(t *testing.T, source string) error {
 
 	expr := parseOneExpression(t, source)
 
-	_, err := (&Evaluator{}).evaluate(expr)
+	_, err := NewEvaluator().evaluate(expr)
 	if err == nil {
 		t.Fatalf("eval(%q): want a runtime error, got none", source)
 	}

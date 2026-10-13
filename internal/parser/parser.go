@@ -16,15 +16,20 @@ import (
 //
 // program        → declaration* EOF ;
 // declaration    → LetDecl | statement ;
-// statement      → exprStmt | printStmt | block ;
+// statement      → exprStmt | printStmt | ifStmt | whileStmt | forStmt | block ;
+// ifStmt         → "if" "(" expression ")" statement ("else" statement)? ; this way we can chain if to else if as if is a stmt
+// whileStmt      → "while" "(" expression ")" statement ;
+// forStmt        → "for" "(" ( variableDecl | exprStmt | ";" ) expression? ";" expression? ")" statement ; desugars to while + a block with the increment appended to the body
 // exprStmt       → expression ";" ;
 // printStmt      → "print" expression ";" ;
-// VariableDecl   → "let" IDENTIFIER ( "=" expression)? ";" ;
+// variableDecl   → "let" IDENTIFIER ( "=" expression)? ";" ;
 // block          →  "{" declaration* "}";
 //
 // expression     → assignment ;
 // assignment     → IDENTIFIER "=" assignment | ternary ;
-// ternary        → equality (? expression : ternary)? ; The alternative '?' recurses rather than looping, making it right-associative.
+// ternary        → logic_or (? expression : ternary)? ; The alternative '?' recurses rather than looping, making it right-associative.
+// logic_or       → logic_and ("or" logic_and)* ;
+// logic_and      → equality ("and" equality)* ;
 // equality       → comparison ( ( "!=" | "==" ) comparison )* ;
 // comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 // term           → factor ( ( "-" | "+" ) factor )* ;
@@ -100,14 +105,133 @@ func (p *Parser) declaration() (d ast.Stmt) {
 	return p.statement()
 }
 
+// TODO: add a breakStmt route here ("break" ";").
+
+// TODO: add continueStmt only together with the forStatement change below.
+// see this https://github.com/munificent/craftinginterpreters/issues/119#issuecomment-318807716
+
 func (p *Parser) statement() ast.Stmt {
 	if p.match(token.PRINT) {
 		return p.printStatement()
+	}
+	if p.match(token.IF) {
+		return p.ifStatement()
+	}
+	if p.match(token.FOR) {
+		return p.forStatement()
+	}
+	if p.match(token.WHILE) {
+		return p.whileStatement()
 	}
 	if p.match(token.LEFTBRACE) {
 		return p.block()
 	}
 	return p.expressionStatement()
+}
+
+// forStatement desugars a C-style for loop into a while loop whose body is a
+// block with the increment appended, so the evaluator needs no ForStmt.
+//
+// The initializer runs once before the loop, so it sits beside the loop rather
+// than inside it; both are wrapped in a block to scope the loop variable to the
+// loop. The increment sits inside the loop's block and assigns within that
+// scope.
+//
+// TRAP: appending the increment this way means a `continue` in the body skips
+// it and the loop spins forever.
+func (p *Parser) forStatement() ast.Stmt {
+	p.consume(token.LEFTPAREN, "Expect '(' after 'for'.")
+
+	// An empty initializer is the semicolon itself, so match it: there is
+	// nothing else to consume. The declared nil is the empty case.
+	var initializer ast.Stmt = nil
+	if p.match(token.LET) {
+		initializer = p.varDeclaration()
+	} else if !p.match(token.SEMICOLON) {
+		initializer = p.expressionStatement()
+	}
+
+	// Unlike the initializer, an empty condition is only looked ahead at.
+	// Matching here would eat the semicolon and shift every later clause.
+	var condition ast.Expression = nil
+	if !p.check(token.SEMICOLON) {
+		condition = p.expression()
+	}
+	p.consume(token.SEMICOLON, "Expect ';' after loop condition.")
+
+	// The increment has no terminator of its own, so an empty one is only
+	// looked ahead at. Matching here would eat the ')' and leave the consume
+	// below looking for a second one.
+	var increment ast.Expression = nil
+	if !p.check(token.RIGHTPAREN) {
+		increment = p.expression()
+	}
+	p.consume(token.RIGHTPAREN, "Expect ')' after for clauses.")
+
+	body := p.statement()
+
+	var bodyStatements []ast.Stmt
+	bodyStatements = append(bodyStatements, body)
+
+	if increment != nil {
+		bodyStatements = append(bodyStatements, &ast.ExpressionStmt{Expr: increment})
+	}
+
+	if condition == nil {
+		condition = &ast.LiteralExpression{Value: true}
+	}
+
+	loop := &ast.WhileStmt{
+		Condition: condition,
+		Body:      &ast.BlockStmt{Statements: bodyStatements},
+	}
+
+	// The initializer runs once, before the loop, so it cannot live in the
+	// loop body. Wrapping init + loop in a block scopes the loop variable to
+	// the loop, so it is not visible afterwards, as in C.
+	if initializer == nil {
+		return loop
+	}
+
+	return &ast.BlockStmt{Statements: []ast.Stmt{initializer, loop}}
+}
+
+func (p *Parser) whileStatement() ast.Stmt {
+	// consume (
+	p.consume(token.LEFTPAREN, "Expect '(' after 'while'.")
+
+	condition := p.expression()
+
+	p.consume(token.RIGHTPAREN, "Expect ')' after while condition.")
+
+	body := p.statement()
+
+	return &ast.WhileStmt{
+		Condition: condition,
+		Body:      body,
+	}
+}
+
+func (p *Parser) ifStatement() ast.Stmt {
+	// consume (
+	p.consume(token.LEFTPAREN, "Expect '(' after 'if'.")
+
+	condition := p.expression()
+
+	p.consume(token.RIGHTPAREN, "Expect ')' after if condition.")
+
+	thenBranch := p.statement()
+	var elseBranch ast.Stmt = nil
+
+	if p.match(token.ELSE) {
+		elseBranch = p.statement()
+	}
+
+	return &ast.IfStmt{
+		Condition:  condition,
+		ThenBranch: thenBranch,
+		ElseBranch: elseBranch,
+	}
 }
 
 func (p *Parser) varDeclaration() ast.Stmt {
@@ -186,7 +310,7 @@ func (p *Parser) assignment() ast.Expression {
 }
 
 func (p *Parser) ternary() ast.Expression {
-	expr := p.equality()
+	expr := p.logic_or()
 
 	if p.match(token.QUESTION) {
 		questionMark := p.previous()
@@ -203,6 +327,32 @@ func (p *Parser) ternary() ast.Expression {
 			Colon:        colon,
 			Alternative:  alternative,
 		}
+	}
+
+	return expr
+}
+
+func (p *Parser) logic_or() ast.Expression {
+	expr := p.logic_and()
+
+	for p.match(token.OR) {
+		operator := p.previous()
+		right := p.logic_and()
+
+		expr = &ast.LogicalExpression{Left: expr, Operator: operator, Right: right}
+	}
+
+	return expr
+}
+
+func (p *Parser) logic_and() ast.Expression {
+	expr := p.equality()
+
+	for p.match(token.AND) {
+		operator := p.previous()
+		right := p.equality()
+
+		expr = &ast.LogicalExpression{Left: expr, Operator: operator, Right: right}
 	}
 
 	return expr

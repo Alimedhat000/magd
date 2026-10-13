@@ -75,6 +75,45 @@ func (e *Evaluator) VisitBlockStmt(stmt *ast.BlockStmt) (any, error) {
 	return nil, nil
 }
 
+func (e *Evaluator) VisitIfStmt(stmt *ast.IfStmt) (any, error) {
+	condition, err := e.evaluate(stmt.Condition)
+	if err != nil {
+		return nil, err
+	}
+
+	if e.isTruthy(condition) {
+		err = e.Execute(stmt.ThenBranch)
+		if err != nil {
+			return nil, err
+		}
+	} else if stmt.ElseBranch != nil {
+		err = e.Execute(stmt.ElseBranch)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return nil, nil
+}
+
+func (e *Evaluator) VisitWhileStmt(stmt *ast.WhileStmt) (any, error) {
+	for {
+		condition, err := e.evaluate(stmt.Condition)
+		if err != nil {
+			return nil, err
+		}
+
+		if !e.isTruthy(condition) {
+			break
+		}
+
+		if err := e.Execute(stmt.Body); err != nil {
+			return nil, err
+		}
+	}
+
+	return nil, nil
+}
+
 func (e *Evaluator) VisitExpressionStmt(stmt *ast.ExpressionStmt) (any, error) {
 	return e.evaluate(stmt.Expr)
 }
@@ -263,6 +302,25 @@ func (e *Evaluator) VisitConditionalExpression(expr *ast.ConditionalExpression) 
 		return e.evaluate(expr.Consequent)
 	}
 	return e.evaluate(expr.Alternative)
+}
+
+func (e *Evaluator) VisitLogicalExpression(expr *ast.LogicalExpression) (any, error) {
+	left, err := e.evaluate(expr.Left)
+	if err != nil {
+		return nil, err
+	}
+
+	// handle fallthrough, or won't evaluate the second condn if the first is true
+	// and and won't evaluate it if the first is false
+	if expr.Operator.Type == token.OR {
+		if e.isTruthy(left) {
+			return left, nil
+		}
+	} else if !e.isTruthy(left) {
+		return left, nil
+	}
+
+	return e.evaluate(expr.Right)
 }
 
 func (e *Evaluator) isTruthy(value any) bool {

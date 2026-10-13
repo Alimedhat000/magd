@@ -12,6 +12,8 @@ type StmtVisitor interface {
 	VisitExpressionStmt(stmt *ExpressionStmt) (any, error)
 	VisitPrintStmt(stmt *PrintStmt) (any, error)
 	VisitVariableStmt(stmt *VariableStmt) (any, error)
+	VisitIfStmt(stmt *IfStmt) (any, error)
+	VisitWhileStmt(stmt *WhileStmt) (any, error)
 	VisitBlockStmt(stmt *BlockStmt) (any, error)
 }
 
@@ -35,6 +37,17 @@ type (
 	BlockStmt struct {
 		Statements []Stmt
 	}
+
+	IfStmt struct {
+		Condition  Expression
+		ThenBranch Stmt
+		ElseBranch Stmt
+	}
+
+	WhileStmt struct {
+		Condition Expression
+		Body      Stmt
+	}
 )
 
 func (stmt *ExpressionStmt) Accept(visitor StmtVisitor) (any, error) {
@@ -51,4 +64,12 @@ func (stmt *VariableStmt) Accept(visitor StmtVisitor) (any, error) {
 
 func (stmt *BlockStmt) Accept(visitor StmtVisitor) (any, error) {
 	return visitor.VisitBlockStmt(stmt)
+}
+
+func (stmt *IfStmt) Accept(visitor StmtVisitor) (any, error) {
+	return visitor.VisitIfStmt(stmt)
+}
+
+func (stmt *WhileStmt) Accept(visitor StmtVisitor) (any, error) {
+	return visitor.VisitWhileStmt(stmt)
 }
