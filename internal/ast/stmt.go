@@ -18,6 +18,8 @@ type StmtVisitor interface {
 	VisitBlockStmt(stmt *BlockStmt) (any, error)
 	VisitBreakStmt(stmt *BreakStmt) (any, error)
 	VisitContinueStmt(stmt *ContinueStmt) (any, error)
+	VisitFunctionStmt(stmt *FunctionStmt) (any, error)
+	VisitReturnStmt(stmt *ReturnStmt) (any, error)
 }
 
 type (
@@ -62,6 +64,17 @@ type (
 	BreakStmt struct{}
 
 	ContinueStmt struct{}
+
+	FunctionStmt struct {
+		Name       token.Token
+		Parameters []token.Token
+		Body       Stmt
+	}
+
+	ReturnStmt struct {
+		Keyword token.Token
+		Value   Expression
+	}
 )
 
 func (stmt *ExpressionStmt) Accept(visitor StmtVisitor) (any, error) {
@@ -98,4 +111,12 @@ func (stmt *ContinueStmt) Accept(visitor StmtVisitor) (any, error) {
 
 func (stmt *BreakStmt) Accept(visitor StmtVisitor) (any, error) {
 	return visitor.VisitBreakStmt(stmt)
+}
+
+func (stmt *FunctionStmt) Accept(visitor StmtVisitor) (any, error) {
+	return visitor.VisitFunctionStmt(stmt)
+}
+
+func (stmt *ReturnStmt) Accept(visitor StmtVisitor) (any, error) {
+	return visitor.VisitReturnStmt(stmt)
 }

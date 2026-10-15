@@ -52,6 +52,9 @@ func (e RuntimeError) Error() string {
 type (
 	BreakSignal    struct{}
 	ContinueSignal struct{}
+	ReturnSignal   struct {
+		Value any
+	}
 )
 
 func (BreakSignal) Error() string {
@@ -60,4 +63,8 @@ func (BreakSignal) Error() string {
 
 func (ContinueSignal) Error() string {
 	return "continue"
+}
+
+func (ReturnSignal) Error() string {
+	return "return"
 }

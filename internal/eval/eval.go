@@ -2,6 +2,7 @@
 package eval
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -43,6 +44,13 @@ func NewEvaluatorTo(w io.Writer) *Evaluator {
 func (e *Evaluator) Eval(stmts []ast.Stmt) error {
 	for _, stmt := range stmts {
 		if err := e.Execute(stmt); err != nil {
+			var ret errs.ReturnSignal
+			if errors.As(err, &ret) {
+				return errs.NewRuntimeError(
+					0, "",
+					"Can't return from top-level code.",
+				)
+			}
 			return err
 		}
 	}
@@ -93,6 +101,20 @@ func (e *Evaluator) VisitIfStmt(stmt *ast.IfStmt) (any, error) {
 		}
 	}
 	return nil, nil
+}
+
+func (e *Evaluator) VisitReturnStmt(stmt *ast.ReturnStmt) (any, error) {
+	var value any
+
+	if stmt.Value != nil {
+		evaluated, err := e.evaluate(stmt.Value)
+		if err != nil {
+			return nil, err
+		}
+		value = evaluated
+	}
+
+	return nil, errs.ReturnSignal{Value: value}
 }
 
 func (e *Evaluator) VisitBreakStmt(stmt *ast.BreakStmt) (any, error) {
@@ -383,6 +405,49 @@ func (e *Evaluator) VisitLogicalExpression(expr *ast.LogicalExpression) (any, er
 	return e.evaluate(expr.Right)
 }
 
+func (e *Evaluator) VisitFunctionStmt(stmt *ast.FunctionStmt) (any, error) {
+	function := &Function{Declaration: stmt, Closure: e.environment}
+
+	e.environment.Define(stmt.Name.Lexeme, function)
+
+	return nil, nil
+}
+
+func (e *Evaluator) VisitCallExpression(expr *ast.CallExpression) (any, error) {
+	calle, err := e.evaluate(expr.Calle)
+	if err != nil {
+		return nil, err
+	}
+
+	var args []any
+	for _, arguemnt := range expr.Arguments {
+
+		arg, err := e.evaluate(arguemnt)
+		if err != nil {
+			return nil, err
+		}
+
+		args = append(args, arg)
+	}
+
+	function, ok := calle.(Callable)
+	if !ok {
+		return nil, errs.NewRuntimeError(
+			expr.Parenthesis.Line, expr.Parenthesis.Lexeme,
+			"Can only call functions.",
+		)
+	}
+
+	if function.Arity() != len(args) {
+		return nil, errs.NewRuntimeError(
+			expr.Parenthesis.Line, expr.Parenthesis.Lexeme,
+			fmt.Sprintf("Expected %d arguments but got %d.", function.Arity(), len(args)),
+		)
+	}
+
+	return function.Call(e, args)
+}
+
 func (e *Evaluator) isTruthy(value any) bool {
 	if value == nil {
 		return false
@@ -442,6 +507,8 @@ func Stringify(value any) string {
 		return v
 	case bool:
 		return strconv.FormatBool(v)
+	case *Function:
+		return "<fun " + v.Declaration.Name.Lexeme + ">"
 	default:
 		return fmt.Sprintf("%v", v)
 	}

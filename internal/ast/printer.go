@@ -96,6 +96,67 @@ func (p *Printer) VisitWhileStmt(stmt *WhileStmt) (any, error) {
 	return "while (" + condition + ") " + body, nil
 }
 
+// funDecl → "fun" IDENTIFIER ( params? ) block
+//
+// A declaration prints without a trailing ';', like if and while: the body
+// already supplies its own braces.
+func (p *Printer) VisitFunctionStmt(stmt *FunctionStmt) (any, error) {
+	var params []string
+	for _, param := range stmt.Parameters {
+		params = append(params, param.Lexeme)
+	}
+
+	body, err := p.printStatement(stmt.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return "fun " + stmt.Name.Lexeme + "(" + strings.Join(params, ", ") + ") " + body, nil
+}
+
+// returnStmt → "return" expression? ";"
+//
+// The value is optional, so a bare return prints without one rather than with
+// an empty slot.
+func (p *Printer) VisitReturnStmt(stmt *ReturnStmt) (any, error) {
+	if stmt.Value == nil {
+		return "return;", nil
+	}
+
+	value, err := p.printExpression(stmt.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	return "return " + value + ";", nil
+}
+
+// call → primary "(" arguments? ")"
+//
+// Printed like any other parenthesised node, so a zero-argument call keeps its
+// empty pair rather than trailing a space.
+func (p *Printer) VisitCallExpression(expr *CallExpression) (any, error) {
+	callee, err := p.printExpression(expr.Calle)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(expr.Arguments) == 0 {
+		return "(" + callee + ")", nil
+	}
+
+	var args []string
+	for _, arg := range expr.Arguments {
+		printed, err := p.printExpression(arg)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, printed)
+	}
+
+	return "(" + callee + " " + strings.Join(args, ", ") + ")", nil
+}
+
 func (p *Printer) VisitForStmt(stmt *ForStmt) (any, error) {
 	var condition string = ""
 	var initializer string = ""

@@ -2,6 +2,8 @@
 package parser
 
 import (
+	"fmt"
+
 	"magd/internal/ast"
 	"magd/internal/errs"
 	"magd/internal/token"
@@ -15,15 +17,19 @@ import (
 // it's way down into the nested subexpressions
 //
 // program        → declaration* EOF ;
-// declaration    → LetDecl | statement ;
-// statement      → exprStmt | printStmt | ifStmt | whileStmt | forStmt | block ;
+// declaration    → FunDecl | LetDecl | statement ;
+// statement      → exprStmt | printStmt | ifStmt | whileStmt | forStmt | returnStmt | block ;
+// returnStmt     → "return" expression? ";" ;
 // ifStmt         → "if" "(" expression ")" statement ("else" statement)? ; this way we can chain if to else if as if is a stmt
 // whileStmt      → "while" "(" expression ")" statement ;
 // forStmt        → "for" "(" ( variableDecl | exprStmt | ";" ) expression? ";" expression? ")" statement ; desugars to while + a block with the increment appended to the body
 // exprStmt       → expression ";" ;
 // printStmt      → "print" expression ";" ;
 // variableDecl   → "let" IDENTIFIER ( "=" expression)? ";" ;
-// block          →  "{" declaration* "}";
+// FunDecl        → "fun" function ;
+// function       → IDENTIFIER "(" parameters? ")" block ;
+// parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
+// block          → "{" declaration* "}";
 //
 // expression     → assignment ;
 // assignment     → IDENTIFIER "=" assignment | ternary ;
@@ -34,7 +40,9 @@ import (
 // comparison     → term ( ( ">" | ">=" | "<" | "<=" ) term )* ;
 // term           → factor ( ( "-" | "+" ) factor )* ;
 // factor         → unary ( ( "/" | "*" ) unary )* ;
-// unary          → ( "!" | "-" ) unary | primary ;
+// unary          → ( "!" | "-" ) unary | call ;
+// call           → primary ( "(" arguments? ")" )* ;
+// arguments      → expression ( "," expression )* ;
 // primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER ;
 
 // TODO: add support for the comma operator like in comparison
@@ -50,6 +58,9 @@ type Parser struct {
 
 	loopDepth int
 }
+
+// This one's for you magd ⁶🤷‍♂️⁷
+const maxArguments = 67
 
 func NewParser(tokens []token.Token) *Parser {
 	return &Parser{tokens: tokens, loopDepth: 0}
@@ -104,6 +115,10 @@ func (p *Parser) declaration() (d ast.Stmt) {
 		return p.varDeclaration()
 	}
 
+	if p.match(token.FUNCTION) {
+		return p.funDeclaration()
+	}
+
 	return p.statement()
 }
 
@@ -134,7 +149,27 @@ func (p *Parser) statement() ast.Stmt {
 	if p.match(token.LEFTBRACE) {
 		return p.block()
 	}
+	if p.match(token.RETURN) {
+		return p.returnStatement()
+	}
+
 	return p.expressionStatement()
+}
+
+func (p *Parser) returnStatement() ast.Stmt {
+	keyword := p.previous()
+	var value ast.Expression
+
+	if !p.check(token.SEMICOLON) {
+		value = p.expression()
+	}
+
+	p.consume(token.SEMICOLON, "Expect ; after return value.")
+
+	return &ast.ReturnStmt{
+		Keyword: keyword,
+		Value:   value,
+	}
 }
 
 func (p *Parser) continueStatement() ast.Stmt {
@@ -246,6 +281,36 @@ func (p *Parser) ifStatement() ast.Stmt {
 		ThenBranch: thenBranch,
 		ElseBranch: elseBranch,
 	}
+}
+
+func (p *Parser) funDeclaration() ast.Stmt {
+	name := p.consume(token.IDENT, "Expect function name.")
+
+	p.consume(token.LEFTPAREN, "Expect ( after a function name.")
+
+	var params []token.Token
+
+	for !p.check(token.RIGHTPAREN) {
+		if len(params) >= maxArguments {
+			str := fmt.Sprintf("Can't have more than %d arguments", maxArguments)
+			raise := p.error(p.peek(), str)
+			panic(raise)
+		}
+
+		params = append(params, p.consume(token.IDENT, "Expect parameter name."))
+
+		if !p.match(token.COMMA) {
+			break
+		}
+	}
+
+	p.consume(token.RIGHTPAREN, "Expect ) after a function name.")
+
+	p.consume(token.LEFTBRACE, "Expect { before a function body.")
+
+	body := p.block()
+
+	return &ast.FunctionStmt{Name: name, Parameters: params, Body: body}
 }
 
 func (p *Parser) varDeclaration() ast.Stmt {
@@ -445,7 +510,48 @@ func (p *Parser) unary() ast.Expression {
 			Right:    right,
 		}
 	}
-	return p.primary()
+	return p.call()
+}
+
+func (p *Parser) call() ast.Expression {
+	expr := p.primary()
+
+	for {
+		if p.match(token.LEFTPAREN) {
+			expr = p.arguments(expr)
+		} else {
+			break
+		}
+	}
+
+	return expr
+}
+
+func (p *Parser) arguments(calle ast.Expression) ast.Expression {
+	var arguments []ast.Expression
+
+	if !p.check(token.RIGHTPAREN) {
+		for {
+
+			if len(arguments) >= maxArguments {
+				raise := p.error(p.peek(), "Can't have more than 255 arguments.")
+				panic(raise)
+			}
+			arguments = append(arguments, p.expression())
+
+			if !p.match(token.COMMA) {
+				break
+			}
+		}
+	}
+
+	paren := p.consume(token.RIGHTPAREN, "Expect ) after arguments")
+
+	return &ast.CallExpression{
+		Calle:       calle,
+		Parenthesis: paren,
+		Arguments:   arguments,
+	}
 }
 
 func (p *Parser) primary() ast.Expression {

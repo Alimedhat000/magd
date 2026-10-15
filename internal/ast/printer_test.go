@@ -200,6 +200,21 @@ func (v *recordingVisitor) VisitForStmt(stmt *ForStmt) (any, error) {
 	return nil, nil
 }
 
+func (v *recordingVisitor) VisitFunctionStmt(stmt *FunctionStmt) (any, error) {
+	v.called = "function"
+	return nil, nil
+}
+
+func (v *recordingVisitor) VisitCallExpression(expr *CallExpression) (any, error) {
+	v.called = "call"
+	return nil, nil
+}
+
+func (v *recordingVisitor) VisitReturnStmt(stmt *ReturnStmt) (any, error) {
+	v.called = "return"
+	return nil, nil
+}
+
 func TestAcceptDispatchesToMatchingVisitMethod(t *testing.T) {
 	tests := []struct {
 		name string
@@ -214,6 +229,7 @@ func TestAcceptDispatchesToMatchingVisitMethod(t *testing.T) {
 		{"variable", &VariableExpression{}, "variable"},
 		{"assignment", &AssignmentExpression{}, "assignment"},
 		{"logical", &LogicalExpression{}, "logical"},
+		{"call", &CallExpression{}, "call"},
 	}
 
 	for _, tt := range tests {
@@ -351,6 +367,8 @@ func TestAcceptDispatchesStatements(t *testing.T) {
 		{"breakStmt", &BreakStmt{}, "break"},
 		{"continueStmt", &ContinueStmt{}, "continue"},
 		{"forStmt", &ForStmt{}, "for"},
+		{"functionStmt", &FunctionStmt{}, "function"},
+		{"returnStmt", &ReturnStmt{}, "return"},
 	}
 
 	for _, tt := range tests {
