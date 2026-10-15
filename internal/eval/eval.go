@@ -95,6 +95,54 @@ func (e *Evaluator) VisitIfStmt(stmt *ast.IfStmt) (any, error) {
 	return nil, nil
 }
 
+func (e *Evaluator) VisitBreakStmt(stmt *ast.BreakStmt) (any, error) {
+	return nil, errs.BreakSignal{}
+}
+
+func (e *Evaluator) VisitContinueStmt(stmt *ast.ContinueStmt) (any, error) {
+	return nil, errs.ContinueSignal{}
+}
+
+func (e *Evaluator) VisitForStmt(stmt *ast.ForStmt) (any, error) {
+	// The loop variable belongs to the loop, not the enclosing scope.
+	previous := e.environment
+	e.environment = env.NewEnvironmentEnclosing(previous)
+	defer func() { e.environment = previous }()
+
+	if stmt.Initializer != nil {
+		if err := e.Execute(stmt.Initializer); err != nil {
+			return nil, err
+		}
+	}
+	for {
+		condition, err := e.evaluate(stmt.Condition)
+		if err != nil {
+			return nil, err
+		}
+		if !e.isTruthy(condition) {
+			break
+		}
+
+		switch err := e.Execute(stmt.Body); err.(type) {
+		case errs.BreakSignal:
+			return nil, nil
+		case errs.ContinueSignal:
+			// falls through on purpose: the increment must still run
+		case nil:
+		default:
+			return nil, err
+		}
+
+		if stmt.Increment != nil {
+			if _, err := e.evaluate(stmt.Increment); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return nil, nil
+}
+
 func (e *Evaluator) VisitWhileStmt(stmt *ast.WhileStmt) (any, error) {
 	for {
 		condition, err := e.evaluate(stmt.Condition)
@@ -106,9 +154,21 @@ func (e *Evaluator) VisitWhileStmt(stmt *ast.WhileStmt) (any, error) {
 			break
 		}
 
-		if err := e.Execute(stmt.Body); err != nil {
+		err = e.Execute(stmt.Body)
+
+		switch err.(type) {
+		case errs.BreakSignal:
+			return nil, nil
+
+		case errs.ContinueSignal:
+			continue
+		case nil:
+			continue
+
+		default:
 			return nil, err
 		}
+
 	}
 
 	return nil, nil

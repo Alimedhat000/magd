@@ -185,6 +185,21 @@ func (v *recordingVisitor) VisitWhileStmt(stmt *WhileStmt) (any, error) {
 	return nil, nil
 }
 
+func (v *recordingVisitor) VisitBreakStmt(stmt *BreakStmt) (any, error) {
+	v.called = "break"
+	return nil, nil
+}
+
+func (v *recordingVisitor) VisitContinueStmt(stmt *ContinueStmt) (any, error) {
+	v.called = "continue"
+	return nil, nil
+}
+
+func (v *recordingVisitor) VisitForStmt(stmt *ForStmt) (any, error) {
+	v.called = "for"
+	return nil, nil
+}
+
 func TestAcceptDispatchesToMatchingVisitMethod(t *testing.T) {
 	tests := []struct {
 		name string
@@ -333,6 +348,9 @@ func TestAcceptDispatchesStatements(t *testing.T) {
 		{"blockStmt", &BlockStmt{}, "block"},
 		{"ifStmt", &IfStmt{}, "if"},
 		{"whileStmt", &WhileStmt{}, "while"},
+		{"breakStmt", &BreakStmt{}, "break"},
+		{"continueStmt", &ContinueStmt{}, "continue"},
+		{"forStmt", &ForStmt{}, "for"},
 	}
 
 	for _, tt := range tests {

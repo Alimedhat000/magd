@@ -47,10 +47,12 @@ type Parser struct {
 	tokens       []token.Token
 	currentToken int
 	errors       []errs.SyntaxError
+
+	loopDepth int
 }
 
 func NewParser(tokens []token.Token) *Parser {
-	return &Parser{tokens: tokens}
+	return &Parser{tokens: tokens, loopDepth: 0}
 }
 
 // Errors returns the syntax errors found so far.
@@ -123,22 +125,46 @@ func (p *Parser) statement() ast.Stmt {
 	if p.match(token.WHILE) {
 		return p.whileStatement()
 	}
+	if p.match(token.BREAK) {
+		return p.breakStatement()
+	}
+	if p.match(token.CONTINUE) {
+		return p.continueStatement()
+	}
 	if p.match(token.LEFTBRACE) {
 		return p.block()
 	}
 	return p.expressionStatement()
 }
 
-// forStatement desugars a C-style for loop into a while loop whose body is a
-// block with the increment appended, so the evaluator needs no ForStmt.
-//
-// The initializer runs once before the loop, so it sits beside the loop rather
-// than inside it; both are wrapped in a block to scope the loop variable to the
-// loop. The increment sits inside the loop's block and assigns within that
-// scope.
-//
-// TRAP: appending the increment this way means a `continue` in the body skips
-// it and the loop spins forever.
+func (p *Parser) continueStatement() ast.Stmt {
+	if p.loopDepth == 0 {
+		raise := p.error(
+			p.previous(),
+			"Cannot use 'continue' outside of a loop.",
+		)
+		panic(raise)
+	}
+
+	p.consume(token.SEMICOLON, "Expect ';' after continue.")
+
+	return &ast.ContinueStmt{}
+}
+
+func (p *Parser) breakStatement() ast.Stmt {
+	if p.loopDepth == 0 {
+		raise := p.error(
+			p.previous(),
+			"Cannot use 'break' outside of a loop.",
+		)
+		panic(raise)
+	}
+
+	p.consume(token.SEMICOLON, "Expect ';' after break.")
+
+	return &ast.BreakStmt{}
+}
+
 func (p *Parser) forStatement() ast.Stmt {
 	p.consume(token.LEFTPAREN, "Expect '(' after 'for'.")
 
@@ -159,41 +185,27 @@ func (p *Parser) forStatement() ast.Stmt {
 	}
 	p.consume(token.SEMICOLON, "Expect ';' after loop condition.")
 
-	// The increment has no terminator of its own, so an empty one is only
-	// looked ahead at. Matching here would eat the ')' and leave the consume
-	// below looking for a second one.
+	if condition == nil {
+		condition = &ast.LiteralExpression{Value: true}
+	}
+
+	// match the ending )
 	var increment ast.Expression = nil
 	if !p.check(token.RIGHTPAREN) {
 		increment = p.expression()
 	}
 	p.consume(token.RIGHTPAREN, "Expect ')' after for clauses.")
 
+	p.loopDepth++
+	defer func() { p.loopDepth-- }()
 	body := p.statement()
 
-	var bodyStatements []ast.Stmt
-	bodyStatements = append(bodyStatements, body)
-
-	if increment != nil {
-		bodyStatements = append(bodyStatements, &ast.ExpressionStmt{Expr: increment})
+	return &ast.ForStmt{
+		Initializer: initializer,
+		Condition:   condition,
+		Increment:   increment,
+		Body:        body,
 	}
-
-	if condition == nil {
-		condition = &ast.LiteralExpression{Value: true}
-	}
-
-	loop := &ast.WhileStmt{
-		Condition: condition,
-		Body:      &ast.BlockStmt{Statements: bodyStatements},
-	}
-
-	// The initializer runs once, before the loop, so it cannot live in the
-	// loop body. Wrapping init + loop in a block scopes the loop variable to
-	// the loop, so it is not visible afterwards, as in C.
-	if initializer == nil {
-		return loop
-	}
-
-	return &ast.BlockStmt{Statements: []ast.Stmt{initializer, loop}}
 }
 
 func (p *Parser) whileStatement() ast.Stmt {
@@ -204,6 +216,8 @@ func (p *Parser) whileStatement() ast.Stmt {
 
 	p.consume(token.RIGHTPAREN, "Expect ')' after while condition.")
 
+	p.loopDepth += 1
+	defer func() { p.loopDepth-- }()
 	body := p.statement()
 
 	return &ast.WhileStmt{

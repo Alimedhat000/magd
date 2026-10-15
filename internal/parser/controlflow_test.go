@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"magd/internal/ast"
+	"magd/internal/errs"
 	"magd/internal/lexer"
 )
 
@@ -131,17 +132,24 @@ func TestForStatement(t *testing.T) {
 		source string
 		want   string
 	}{
+		// For is a dedicated node rather than a desugared while, so each clause is
+		// printed in its own slot. An omitted clause prints as nothing.
 		{"all clauses", "for (let i = 0; i < 3; i = i + 1) print i;",
-			"{\nlet i = 0;\nwhile ((< i 3)) {\nprint i;\n(= i (+ i 1));\n}\n}"},
+			"for (let i = 0; (< i 3); (= i (+ i 1))) print i;"},
 		{"empty initializer", "for (; i < 3; i = i + 1) print i;",
-			"while ((< i 3)) {\nprint i;\n(= i (+ i 1));\n}"},
-		// An empty condition means "forever", represented as the literal true.
+			"for (; (< i 3); (= i (+ i 1))) print i;"},
+		// An omitted condition means "forever", so the parser substitutes the
+		// literal true and the node's Condition is never nil.
 		{"empty condition", "for (let i = 0;;) print i;",
-			"{\nlet i = 0;\nwhile (true) {\nprint i;\n}\n}"},
+			"for (let i = 0; true; ) print i;"},
 		{"empty increment", "for (let i = 0; i < 3;) print i;",
-			"{\nlet i = 0;\nwhile ((< i 3)) {\nprint i;\n}\n}"},
+			"for (let i = 0; (< i 3); ) print i;"},
+		{"all clauses empty", "for (;;) print i;",
+			"for (; true; ) print i;"},
 		{"expression initializer", "for (i = 0; i < 3; i = i + 1) print i;",
-			"{\n(= i 0);\nwhile ((< i 3)) {\nprint i;\n(= i (+ i 1));\n}\n}"},
+			"for ((= i 0); (< i 3); (= i (+ i 1))) print i;"},
+		{"block body", "for (let i = 0; i < 2; i = i + 1) { print i; }",
+			"for (let i = 0; (< i 2); (= i (+ i 1))) {\nprint i;\n}"},
 	}
 
 	for _, tt := range tests {
@@ -162,5 +170,88 @@ func TestForMissingSemicolonIsAnError(t *testing.T) {
 
 	if len(p.Errors()) == 0 {
 		t.Fatal("want a syntax error for the missing ';' after the initializer")
+	}
+}
+
+// parseErrs returns the diagnostics for source, without failing the test.
+func parseErrs(t *testing.T, source string) []errs.SyntaxError {
+	t.Helper()
+
+	p := NewParser(lexer.NewLexer(source).ScanTokens())
+	p.Parse()
+	return p.Errors()
+}
+
+// break and continue are only legal inside a loop. The depth counter covers
+// the loop body alone, so a for's initializer, condition and increment do not
+// count as loop context.
+func TestBreakAndContinueAreRejectedOutsideALoop(t *testing.T) {
+	for _, keyword := range []string{"break", "continue"} {
+		t.Run(keyword+" at top level", func(t *testing.T) {
+			if got := parseErrs(t, keyword+";"); len(got) == 0 {
+				t.Errorf("parse(%q) = no errors, want one for '%s' outside a loop", keyword+";", keyword)
+			}
+		})
+
+		t.Run(keyword+" in a block", func(t *testing.T) {
+			if got := parseErrs(t, "{ "+keyword+"; }"); len(got) == 0 {
+				t.Errorf("parse(%q) = no errors, want one", "{ "+keyword+"; }")
+			}
+		})
+
+		t.Run(keyword+" in an if", func(t *testing.T) {
+			if got := parseErrs(t, "if (true) "+keyword+";"); len(got) == 0 {
+				t.Errorf("parse(%q) = no errors, want one", "if (true) "+keyword+";")
+			}
+		})
+
+		t.Run(keyword+" after a loop", func(t *testing.T) {
+			if got := parseErrs(t, "while (true) { } "+keyword+";"); len(got) == 0 {
+				t.Errorf("parse(%q) = no errors, want one", "while (true) { } "+keyword+";")
+			}
+		})
+
+		t.Run(keyword+" in a for increment", func(t *testing.T) {
+			source := "for (let i = 0; i < 3; " + keyword + ") print i;"
+			if got := parseErrs(t, source); len(got) == 0 {
+				t.Errorf("parse(%q) = no errors, want one", source)
+			}
+		})
+	}
+}
+
+func TestBreakAndContinueAreAcceptedInsideALoop(t *testing.T) {
+	sources := []string{
+		"while (true) break;",
+		"while (true) continue;",
+		"for (;;) break;",
+		"for (;;) continue;",
+		"while (true) { break; }",
+		"while (true) { continue; }",
+		"while (true) if (true) break;",
+		"while (true) if (false) continue;",
+		"for (let i = 0; i < 3; i = i + 1) { if (i == 1) break; }",
+		"while (true) { while (true) { break; } continue; }",
+	}
+
+	for _, source := range sources {
+		t.Run(source, func(t *testing.T) {
+			if got := parseErrs(t, source); len(got) != 0 {
+				t.Errorf("parse(%q) = %v, want no errors", source, got)
+			}
+		})
+	}
+}
+
+// A syntax error inside a loop body unwinds through the panic that carries the
+// error. The depth must still be restored, or every later break in the file is
+// silently accepted.
+func TestLoopDepthIsRestoredAfterASyntaxError(t *testing.T) {
+	errs := parseErrs(t, "while (true) { 1 + } break;")
+
+	// One error for the malformed body, one for the top-level break.
+	if len(errs) != 2 {
+		t.Errorf("got %d errors (%v), want 2: a stale loop depth swallows the break",
+			len(errs), errs)
 	}
 }

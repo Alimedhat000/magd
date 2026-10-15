@@ -240,8 +240,7 @@ func TestForStatement(t *testing.T) {
 	}
 }
 
-// The desugared block scopes the loop variable, so it is not visible after the
-// loop, as in C.
+// The loop variable is scoped to the loop, so it is not visible after it, as in C.
 func TestForLoopVariableIsScopedToTheLoop(t *testing.T) {
 	evalPrints(t, `for (let i = 0; i < 1; i = i + 1) print i;`)
 
@@ -249,5 +248,119 @@ func TestForLoopVariableIsScopedToTheLoop(t *testing.T) {
 		t.Error("want an undefined-variable error after the loop, got none")
 	} else if !strings.Contains(err.Error(), "Undefined Variable") {
 		t.Errorf("error = %q, want an undefined-variable error", err)
+	}
+}
+
+// A shadowing outer variable must survive the loop untouched.
+func TestForLoopVariableDoesNotClobberTheOuterOne(t *testing.T) {
+	if got := evalPrints(t, `let i = 99; for (let i = 0; i < 2; i = i + 1) print i; print i;`); got != "0\n1\n99\n" {
+		t.Errorf("printed %q, want %q", got, "0\n1\n99\n")
+	}
+}
+
+// continue must fall through to the increment instead of skipping it. This is
+// exactly what a dedicated ForStmt buys over desugaring to while, where the
+// increment is just another body statement and gets jumped over.
+func TestForContinueStillRunsTheIncrement(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{
+			"skips the rest of the body",
+			`for (let i = 0; i < 5; i = i + 1) { if (i == 2) continue; print i; }`,
+			"0\n1\n3\n4\n",
+		},
+		{
+			"continuing every iteration still terminates",
+			`for (let i = 0; i < 3; i = i + 1) { continue; } print "done";`,
+			"done\n",
+		},
+		{
+			"continue past the first of several",
+			`let total = 0;
+			 for (let i = 1; i <= 5; i = i + 1) { if (i == 3) continue; total = total + i; }
+			 print total;`,
+			"12\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := evalPrints(t, tt.source); got != tt.want {
+				t.Errorf("printed %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestBreakExitsOnlyTheInnermostLoop(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{
+			"break leaves the inner for running",
+			`for (let i = 0; i < 3; i = i + 1) { for (let j = 0; j < 3; j = j + 1) { break; } print i; }`,
+			"0\n1\n2\n",
+		},
+		{
+			"break leaves a for for a surrounding while",
+			`let i = 0; while (i < 3) { for (let j = 0; j < 9; j = j + 1) { if (j == 1) break; } print i; i = i + 1; }`,
+			"0\n1\n2\n",
+		},
+		{
+			"break out of a while",
+			`let i = 0; while (true) { i = i + 1; if (i == 2) break; } print i;`,
+			"2\n",
+		},
+		{
+			"break out of a for",
+			`for (let i = 0; i < 100; i = i + 1) { if (i == 3) break; print i; }`,
+			"0\n1\n2\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := evalPrints(t, tt.source); got != tt.want {
+				t.Errorf("printed %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// break and continue travel back through ifs and blocks as errors. A real
+// runtime error on the same path must still be reported rather than swallowed
+// by the loop's signal handling.
+func TestControlFlowSignalsDoNotSwallowErrors(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+	}{
+		{"while body errors", `while (true) { print 1 / 0; }`},
+		{"for body errors", `for (let i = 0; i < 3; i = i + 1) { print 1 / 0; }`},
+		// continue must not skip the increment, and an error raised there is
+		// still an error.
+		{"increment errors after a continue", `for (let i = 0; i < 2; i = 1 / 0) { continue; }`},
+		{"undefined variable in the body", `for (let i = 0; i < 3; i = i + 1) { print missing; }`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := runProgram(t, tt.source); err == nil {
+				t.Errorf("eval(%q): want a runtime error, got none", tt.source)
+			}
+		})
+	}
+}
+
+// An omitted condition means "forever", as in C. With break to leave, this
+// terminates instead of hanging.
+func TestForWithOmittedCondition(t *testing.T) {
+	if got := evalPrints(t, `for (;;) { print "once"; break; }`); got != "once\n" {
+		t.Errorf("printed %q, want %q", got, "once\n")
 	}
 }

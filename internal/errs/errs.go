@@ -48,3 +48,16 @@ func NewRuntimeError(line int, lexeme, message string) *RuntimeError {
 func (e RuntimeError) Error() string {
 	return fmt.Sprintf("runtime error on line %d at '%s': %s", e.line, e.lexeme, e.message)
 }
+
+type (
+	BreakSignal    struct{}
+	ContinueSignal struct{}
+)
+
+func (BreakSignal) Error() string {
+	return "break"
+}
+
+func (ContinueSignal) Error() string {
+	return "continue"
+}

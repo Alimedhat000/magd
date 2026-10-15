@@ -47,6 +47,16 @@ func (p *Printer) VisitLogicalExpression(expr *LogicalExpression) (any, error) {
 	return p.parenthesize(expr.Operator.Lexeme, expr.Left, expr.Right)
 }
 
+// break and continue carry no data, so they print as their source form,
+// semicolon included, like print and let.
+func (p *Printer) VisitBreakStmt(stmt *BreakStmt) (any, error) {
+	return "break;", nil
+}
+
+func (p *Printer) VisitContinueStmt(stmt *ContinueStmt) (any, error) {
+	return "continue;", nil
+}
+
 func (p *Printer) VisitIfStmt(stmt *IfStmt) (any, error) {
 	condition, err := p.printExpression(stmt.Condition)
 	if err != nil {
@@ -84,6 +94,43 @@ func (p *Printer) VisitWhileStmt(stmt *WhileStmt) (any, error) {
 	}
 
 	return "while (" + condition + ") " + body, nil
+}
+
+func (p *Printer) VisitForStmt(stmt *ForStmt) (any, error) {
+	var condition string = ""
+	var initializer string = ""
+	var increment string = ""
+	var err error
+
+	if stmt.Condition != nil {
+		condition, err = p.printExpression(stmt.Condition)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if stmt.Initializer != nil {
+		initializer, err = p.printStatement(stmt.Initializer)
+		if err != nil {
+			return nil, err
+		}
+		// printStatement terminates a statement with ';', and the separator
+		// below supplies the one belonging to the for header.
+		initializer = strings.TrimSuffix(initializer, ";")
+	}
+
+	if stmt.Increment != nil {
+		increment, err = p.printExpression(stmt.Increment)
+		if err != nil {
+			return nil, err
+		}
+	}
+	body, err := p.printStatement(stmt.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return "for (" + initializer + "; " + condition + "; " + increment + ") " + body, nil
 }
 
 func (p *Printer) VisitLiteralExpression(expr *LiteralExpression) (any, error) {
