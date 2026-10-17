@@ -181,8 +181,15 @@ func (e *Evaluator) VisitPrintStmt(stmt *ast.PrintStmt) (any, error) {
 	return nil, nil
 }
 
+// VisitFunctionStmt does two things: it builds the function value, then binds it
+// to a name.
 func (e *Evaluator) VisitFunctionStmt(stmt *ast.FunctionStmt) (any, error) {
-	function := &Function{Declaration: stmt, Closure: e.environment}
+	function := &Function{
+		Name:       stmt.Name.Lexeme,
+		Parameters: stmt.Parameters,
+		Body:       stmt.Body,
+		Closure:    e.environment,
+	}
 
 	e.environment.Define(stmt.Name.Lexeme, function)
 

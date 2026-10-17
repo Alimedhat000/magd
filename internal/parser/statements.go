@@ -40,7 +40,11 @@ func (p *Parser) declaration() (d ast.Stmt) {
 		return p.varDeclaration()
 	}
 
-	if p.match(token.FUNCTION) {
+	// The name check is what separates the two forms: "fun name(...)" is a
+	// declaration and binds a name, "fun (...)" is an expression that binds
+	// nothing.
+	if p.check(token.FUNCTION) && p.checkNext(token.IDENT) {
+		p.advance() // consume "fun"
 		return p.funDeclaration()
 	}
 
@@ -208,6 +212,16 @@ func (p *Parser) funDeclaration() ast.Stmt {
 
 	p.consume(token.LEFTPAREN, "Expect ( after a function name.")
 
+	params := p.parameters()
+
+	p.consume(token.LEFTBRACE, "Expect { before a function body.")
+
+	body := p.block()
+
+	return &ast.FunctionStmt{Name: name, Parameters: params, Body: body}
+}
+
+func (p *Parser) parameters() []token.Token {
 	var params []token.Token
 
 	for !p.check(token.RIGHTPAREN) {
@@ -226,11 +240,7 @@ func (p *Parser) funDeclaration() ast.Stmt {
 
 	p.consume(token.RIGHTPAREN, "Expect ) after a function name.")
 
-	p.consume(token.LEFTBRACE, "Expect { before a function body.")
-
-	body := p.block()
-
-	return &ast.FunctionStmt{Name: name, Parameters: params, Body: body}
+	return params
 }
 
 func (p *Parser) varDeclaration() ast.Stmt {

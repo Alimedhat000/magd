@@ -106,12 +106,23 @@ func (p *Parser) match(types ...token.TokenType) bool {
 	return false
 }
 
-// check returns True if the current token is of the give type
+// check reports whether the current token is of the given type, without
+// consuming it.
 func (p *Parser) check(t token.TokenType) bool {
 	if p.isAtEnd() {
 		return false
 	}
 	return p.peek().Type == t
+}
+
+// checkNext reports whether the token after the current one has the given
+// type, without consuming anything.
+func (p *Parser) checkNext(t token.TokenType) bool {
+	next := p.currentToken + 1
+	if next >= len(p.tokens) {
+		return false
+	}
+	return p.tokens[next].Type == t
 }
 
 // advance consumes the current token and increases the current

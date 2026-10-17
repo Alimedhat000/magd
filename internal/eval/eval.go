@@ -132,7 +132,11 @@ func Stringify(value any) string {
 	case bool:
 		return strconv.FormatBool(v)
 	case *Function:
-		return "<fun " + v.Declaration.Name.Lexeme + ">"
+		// An anonymous function has no name to show.
+		if v.Name == "" {
+			return "<fun>"
+		}
+		return "<fun " + v.Name + ">"
 	default:
 		return fmt.Sprintf("%v", v)
 	}

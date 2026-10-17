@@ -131,6 +131,24 @@ func (p *Printer) VisitReturnStmt(stmt *ReturnStmt) (any, error) {
 	return "return " + value + ";", nil
 }
 
+// functionExpr → "fun" "(" parameters? ")" block
+//
+// Printed like every other parenthesised node, with the body as its third
+// element, so an anonymous function round-trips through the parser.
+func (p *Printer) VisitFunctionExpression(expr *FunctionExpression) (any, error) {
+	var params []string
+	for _, param := range expr.Parameters {
+		params = append(params, param.Lexeme)
+	}
+
+	body, err := p.printStatement(expr.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return "(fun (" + strings.Join(params, ", ") + ") " + body + ")", nil
+}
+
 // call → primary "(" arguments? ")"
 //
 // Printed like any other parenthesised node, so a zero-argument call keeps its

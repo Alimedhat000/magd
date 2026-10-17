@@ -491,3 +491,116 @@ func TestFunctionsAndVariablesShareANamespace(t *testing.T) {
 		t.Errorf("got %v, want 2: a function declaration must rebind the name", got)
 	}
 }
+
+// An anonymous function produces a value and binds nothing. Whoever wants it
+// — a let, an argument, a return — is what gives it a name, if any.
+func TestAnonymousFunctions(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+		want   any
+	}{
+		{
+			"bound by let",
+			`let d = fun(n) { return n * 2; }; let r = d(4);`,
+			float64(8),
+		},
+		{
+			"no parameters",
+			`let f = fun() { return 7; }; let r = f();`,
+			float64(7),
+		},
+		{
+			"several parameters",
+			`let sub = fun(x, y) { return x - y; }; let r = sub(5, 2);`,
+			float64(3),
+		},
+		{
+			"returned from a function and called immediately",
+			`fun make() { return fun(n) { return n + 1; }; } let r = make()(1);`,
+			float64(2),
+		},
+		{
+			"returned and called later",
+			`fun make() { return fun() { return "made"; }; } let f = make(); let r = f();`,
+			"made",
+		},
+		{
+			// The book's tricky case: an anonymous function in statement
+			// position creates a value and discards it. Valid, but useless.
+			"created and discarded",
+			`fun() { }; let r = 1;`,
+			float64(1),
+		},
+		{
+			// A declaration and an expression of the same shape both run.
+			"mixed with a declaration",
+			`fun named() { return 1; } let r = named() + (fun() { return 2; })();`,
+			float64(3),
+		},
+		{
+			"captures the scope it was written in",
+			`fun make() { let n = 10; return fun() { return n; }; } let r = make()();`,
+			float64(10),
+		},
+		{
+			"keeps captured state across calls",
+			`let counter = fun() { let i = 0; return fun() { i = i + 1; return i; }; }();
+			 counter(); counter(); let r = counter();`,
+			float64(3),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := evalResult(t, tt.source, "r"); got != tt.want {
+				t.Errorf("got %v (%T), want %v (%T)", got, got, tt.want, tt.want)
+			}
+		})
+	}
+}
+
+// The book's challenge: an anonymous function passed straight into another
+// function, never named at all.
+func TestAnonymousFunctionAsArgument(t *testing.T) {
+	got := evalPrints(t, `
+		fun thrice(fn) { for (let i = 1; i <= 3; i = i + 1) { fn(i); } }
+		thrice(fun(a) { print a; });`)
+
+	if got != "1\n2\n3\n" {
+		t.Errorf("printed %q, want %q", got, "1\n2\n3\n")
+	}
+}
+
+func TestAnonymousFunctionArity(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+	}{
+		{"too few", `let f = fun(a, b) { return a + b; }; f(1);`},
+		{"too many", `let f = fun(a) { return a; }; f(1, 2);`},
+		{"none", `let f = fun(a) { return a; }; f();`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := runProgram(t, tt.source)
+			if err == nil {
+				t.Fatalf("eval(%q): want an arity error, got none", tt.source)
+			}
+			if !strings.Contains(err.Error(), "arguments but got") {
+				t.Errorf("error = %q, want an arity mismatch message", err)
+			}
+		})
+	}
+}
+
+func TestStringifyAnonymousFunction(t *testing.T) {
+	got := evalPrints(t, `
+		let f = fun() { return 1; };
+		print f;`)
+
+	if got != "<fun>\n" {
+		t.Errorf("printed %q, want %q: an anonymous function has no name to show", got, "<fun>\n")
+	}
+}

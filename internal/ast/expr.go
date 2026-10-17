@@ -31,8 +31,8 @@ type ExprVisitor interface {
 	VisitVariableExpression(expr *VariableExpression) (any, error)
 	VisitAssignmentExpression(expr *AssignmentExpression) (any, error)
 	VisitLogicalExpression(expr *LogicalExpression) (any, error)
-
 	VisitCallExpression(expr *CallExpression) (any, error)
+	VisitFunctionExpression(expr *FunctionExpression) (any, error)
 }
 
 type BinaryExpression struct {
@@ -83,6 +83,12 @@ type CallExpression struct {
 	Arguments   []Expression
 }
 
+type FunctionExpression struct {
+	Parenthesis token.Token
+	Parameters  []token.Token
+	Body        Stmt
+}
+
 func (expr *VariableExpression) Accept(visitor ExprVisitor) (any, error) {
 	return visitor.VisitVariableExpression(expr)
 }
@@ -117,4 +123,8 @@ func (expr *LogicalExpression) Accept(visitor ExprVisitor) (any, error) {
 
 func (expr *CallExpression) Accept(visitor ExprVisitor) (any, error) {
 	return visitor.VisitCallExpression(expr)
+}
+
+func (expr *FunctionExpression) Accept(visitor ExprVisitor) (any, error) {
+	return visitor.VisitFunctionExpression(expr)
 }

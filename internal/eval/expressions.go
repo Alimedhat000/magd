@@ -190,6 +190,16 @@ func (e *Evaluator) VisitLogicalExpression(expr *ast.LogicalExpression) (any, er
 	return e.evaluate(expr.Right)
 }
 
+// VisitFunctionExpression returns An anonymous function that is the same as a declaration, minus the
+// binding: it produces a function and names nothing.
+func (e *Evaluator) VisitFunctionExpression(expr *ast.FunctionExpression) (any, error) {
+	return &Function{
+		Parameters: expr.Parameters,
+		Body:       expr.Body,
+		Closure:    e.environment,
+	}, nil
+}
+
 func (e *Evaluator) VisitCallExpression(expr *ast.CallExpression) (any, error) {
 	calle, err := e.evaluate(expr.Calle)
 	if err != nil {

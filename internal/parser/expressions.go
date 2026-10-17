@@ -22,7 +22,8 @@ import (
 // unary          → ( "!" | "-" ) unary | call ;
 // call           → primary ( "(" arguments? ")" )* ;
 // arguments      → expression ( "," expression )* ;
-// primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER ;
+// primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER | FunExpr;
+// FunExpr        → "fun" "(" primary ")" block
 
 // TODO: add support for the comma operator like in comparison
 
@@ -220,7 +221,30 @@ func (p *Parser) arguments(calle ast.Expression) ast.Expression {
 	}
 }
 
+func (p *Parser) functionExpression() ast.Expression {
+	p.consume(token.LEFTPAREN, "Expect '(' after 'fun'.")
+
+	parameters := p.parameters()
+
+	p.consume(token.LEFTBRACE, "Expect '{' before function body.")
+
+	body := p.block()
+
+	return &ast.FunctionExpression{
+		Parenthesis: p.previous(),
+		Parameters:  parameters,
+		Body:        body,
+	}
+}
+
 func (p *Parser) primary() ast.Expression {
+	// A function is a value, so it belongs here rather than with the
+	// statements: `let d = fun(n) {...}` and `thrice(fun(a) {...})` both
+	// start this way.
+	if p.match(token.FUNCTION) {
+		return p.functionExpression()
+	}
+
 	if p.match(token.TRUE) {
 		return &ast.LiteralExpression{Value: true}
 	}

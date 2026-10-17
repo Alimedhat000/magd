@@ -215,6 +215,11 @@ func (v *recordingVisitor) VisitReturnStmt(stmt *ReturnStmt) (any, error) {
 	return nil, nil
 }
 
+func (v *recordingVisitor) VisitFunctionExpression(expr *FunctionExpression) (any, error) {
+	v.called = "functionExpr"
+	return nil, nil
+}
+
 func TestAcceptDispatchesToMatchingVisitMethod(t *testing.T) {
 	tests := []struct {
 		name string
@@ -230,6 +235,7 @@ func TestAcceptDispatchesToMatchingVisitMethod(t *testing.T) {
 		{"assignment", &AssignmentExpression{}, "assignment"},
 		{"logical", &LogicalExpression{}, "logical"},
 		{"call", &CallExpression{}, "call"},
+		{"functionExpr", &FunctionExpression{}, "functionExpr"},
 	}
 
 	for _, tt := range tests {
