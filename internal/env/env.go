@@ -4,6 +4,8 @@ package env
 // TODO: make redifining return an error instead of re assign
 
 import (
+	"fmt"
+
 	"magd/internal/errs"
 	"magd/internal/token"
 )
@@ -61,4 +63,48 @@ func (e *Environment) Assign(name token.Token, value any) (any, error) {
 		name.Line, name.Lexeme,
 		"Undefined Variable '"+name.Lexeme+"'.",
 	)
+}
+
+func (e *Environment) AssignAt(distance int, name token.Token, value any) (any, error) {
+	env, err := e.Ancestor(distance)
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := env.values[name.Lexeme]; !ok {
+		return nil, errs.NewRuntimeError(
+			name.Line, name.Lexeme,
+			"Undefined Variable '"+name.Lexeme+"'.")
+	}
+	env.values[name.Lexeme] = value
+	return value, nil
+}
+
+func (e *Environment) GetAt(distance int, name token.Token) (any, error) {
+	env, err := e.Ancestor(distance)
+	if err != nil {
+		return nil, err
+	}
+
+	if value, ok := env.values[name.Lexeme]; ok {
+		return value, nil
+	}
+
+	return nil, errs.NewRuntimeError(
+		name.Line, name.Lexeme,
+		"Undefined Variable '"+name.Lexeme+"'.",
+	)
+}
+
+// Ancestor walks a fixed number of hops up the parent chain and returns the Environment
+// there
+func (e *Environment) Ancestor(distance int) (*Environment, error) {
+	env := e
+	for range distance {
+		if env.enclosing == nil {
+			return nil, fmt.Errorf(
+				"environment: walked %d past the root scope", distance)
+		}
+		env = env.enclosing
+	}
+	return env, nil
 }

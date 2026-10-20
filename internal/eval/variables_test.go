@@ -238,16 +238,25 @@ func TestBlockReadsEnclosingScope(t *testing.T) {
 
 // Chapter challenge 3: what does this do?
 //
-//	var a = 1;
-//	{ var a = a + 2; print a; }
+//	let a = 1;
+//	{ let a = a + 2; print a; }
 //
-// The initializer is evaluated before the inner a is defined, so it reads the
-// outer a (1) and the inner a becomes 3. The outer a is untouched.
-func TestBlockInitializerReadsOuterBinding(t *testing.T) {
+// Chapter 8 answered that the initializer runs before the inner a is
+// defined, so it reads the outer a (1) and the inner a becomes 3.
+//
+// Chapter 11 changes the answer. The inner a shadows the outer one, so
+// reading the name inside its own initializer reads a variable that is not
+// ready yet. The resolver rejects that before the program runs, which is
+// where the book wants this kind of mistake caught.
+func TestBlockInitializerCannotReadOuterBinding(t *testing.T) {
 	source := `let a = 1; { let a = a + 2; print a; } print a;`
 
-	if got := evalPrint(t, source); got != "3\n1\n" {
-		t.Errorf("printed %q, want \"3\\n1\\n\"", got)
+	err := runProgram(t, source)
+	if err == nil {
+		t.Fatal("want an error reading a shadowed name in its own initializer")
+	}
+	if !strings.Contains(err.Error(), "Can't read local variable in its own initializer") {
+		t.Errorf("error = %q, want the own-initializer error", err)
 	}
 }
 

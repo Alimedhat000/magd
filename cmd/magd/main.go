@@ -49,6 +49,9 @@ func run(source string) bool {
 		}
 		return false
 	}
+
+	// The evaluator resolves the statements before running them, so a name
+	// that cannot be bound is reported before anything executes.
 	if err := eval.NewEvaluator().Eval(statements); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return false

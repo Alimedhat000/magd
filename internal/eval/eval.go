@@ -17,11 +17,14 @@ import (
 	"magd/internal/ast"
 	"magd/internal/env"
 	"magd/internal/errs"
+	"magd/internal/resolver"
 	"magd/internal/token"
 )
 
 type Evaluator struct {
+	globals     *env.Environment
 	environment *env.Environment
+	Locals      map[ast.Expression]int
 	out         io.Writer
 }
 
@@ -33,20 +36,45 @@ var (
 )
 
 func NewEvaluator() *Evaluator {
-	return &Evaluator{environment: env.NewEnvironment()}
+	return newEvaluator(nil)
 }
 
 // NewEvaluatorTo is NewEvaluator with the print destination overridden.
 // The REPL passes its own buffer. A nil writer means the current os.Stdout
 // at print time, so tests that redirect os.Stdout keep working.
 func NewEvaluatorTo(w io.Writer) *Evaluator {
-	return &Evaluator{environment: env.NewEnvironment(), out: w}
+	return newEvaluator(w)
+}
+
+// newEvaluator builds an evaluator over a fresh global scope.
+func newEvaluator(w io.Writer) *Evaluator {
+	globals := env.NewEnvironment()
+
+	e := &Evaluator{globals: globals, environment: globals, out: w}
+	e.defineNatives()
+
+	return e
+}
+
+// defineNatives puts the interpreter's built-in functions in the global scope.
+// They live there like any other global, so Lox code can call them by name
+// and can shadow them with a binding of its own.
+func (e *Evaluator) defineNatives() {
+	e.globals.Define("clock", &NativeFunction{
+		Name:    "clock",
+		NumArgs: 0,
+		Fn:      clock,
+	})
 }
 
 // Eval executes a program. Statements produce no values, so there is nothing
 // to return — only errors. There is deliberately no recover here: runtime
 // errors are returned, so a panic is always a real bug and must crash.
 func (e *Evaluator) Eval(stmts []ast.Stmt) error {
+	if err := e.resolve(stmts); err != nil {
+		return err
+	}
+
 	for _, stmt := range stmts {
 		if err := e.Execute(stmt); err != nil {
 			if _, ok := errors.AsType[errs.ReturnSignal](err); ok {
@@ -64,12 +92,51 @@ func (e *Evaluator) Eval(stmts []ast.Stmt) error {
 // EvalExpression evaluates a single expression and returns its value.
 // The REPL uses it to display bare expression statements.
 func (e *Evaluator) EvalExpression(expr ast.Expression) (any, error) {
+	if err := e.resolveExpression(expr); err != nil {
+		return nil, err
+	}
+
 	return e.evaluate(expr)
+}
+
+// resolve runs the resolver over the statements, recording the scope
+// distances it finds. Each expression that names a local records how many
+// scopes up that local is declared.
+//
+// The table lives on the evaluator and is kept between calls: the REPL
+// evaluates one entry at a time, and a function defined in one entry is
+// called in another.
+func (e *Evaluator) resolve(stmts []ast.Stmt) error {
+	if e.Locals == nil {
+		e.Locals = map[ast.Expression]int{}
+	}
+
+	return resolver.New(e.Locals).ResolveStatements(stmts)
+}
+
+// resolveExpression is resolve for a single expression, which is what the
+// REPL evaluates when an entry is a bare expression.
+func (e *Evaluator) resolveExpression(expr ast.Expression) error {
+	if e.Locals == nil {
+		e.Locals = map[ast.Expression]int{}
+	}
+
+	return resolver.New(e.Locals).ResolveExpression(expr)
 }
 
 func (e *Evaluator) Execute(stmt ast.Stmt) error {
 	_, err := stmt.Accept(e)
 	return err
+}
+
+// LookUpVariable reads a name. The resolver records how many scopes up the
+// binding lives; without an entry the name is global, so it is read from the
+// global scope.
+func (e *Evaluator) LookUpVariable(name token.Token, expr ast.Expression) (any, error) {
+	if distance, ok := e.Locals[expr]; ok {
+		return e.environment.GetAt(distance, name)
+	}
+	return e.globals.Get(name)
 }
 
 func (e *Evaluator) isTruthy(value any) bool {
@@ -137,6 +204,9 @@ func Stringify(value any) string {
 			return "<fun>"
 		}
 		return "<fun " + v.Name + ">"
+	case *NativeFunction:
+		// A native function has no Lox source to show, only its name.
+		return "<native fn>"
 	default:
 		return fmt.Sprintf("%v", v)
 	}

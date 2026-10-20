@@ -15,7 +15,7 @@ import (
 )
 
 func (e *Evaluator) VisitVariableExpression(expr *ast.VariableExpression) (any, error) {
-	value, err := e.environment.Get(expr.Name)
+	value, err := e.LookUpVariable(expr.Name, expr)
 	if err != nil {
 		return nil, err
 	}
@@ -29,10 +29,15 @@ func (e *Evaluator) VisitAssignmentExpression(expr *ast.AssignmentExpression) (a
 		return nil, err
 	}
 
-	_, err = e.environment.Assign(expr.Name, value)
+	if distance, ok := e.Locals[expr]; ok {
+		_, err = e.environment.AssignAt(distance, expr.Name, value)
+	} else {
+		_, err = e.globals.Assign(expr.Name, value)
+	}
 	if err != nil {
 		return nil, err
 	}
+
 	return value, nil
 }
 
