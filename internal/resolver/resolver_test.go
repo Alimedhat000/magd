@@ -328,16 +328,21 @@ func TestReturnInsideAFunctionIsAllowed(t *testing.T) {
 // inner a is declared, so the name refers to the global a — and it keeps
 // referring to it, no matter what the block declares later. Before the
 // resolver, the second call printed "block".
+//
+// The inner a is read so the unused-variable check does not reject the
+// program. It is read by the block, not by showA: the closure still resolves
+// to the global.
 func TestClosureKeepsTheBindingItWasWrittenWith(t *testing.T) {
 	source := `let a = "global";
 	{
 		fun showA() { print a; }
 		showA();
 		let a = "block";
+		print a;
 		showA();
 	}`
 
-	evalPrints(t, source, "global\nglobal\n")
+	evalPrints(t, source, "global\nblock\nglobal\n")
 }
 
 // Declaring the same name twice in one local scope is a mistake. The earlier
@@ -410,7 +415,7 @@ func TestResolverWalksEveryExpression(t *testing.T) {
 		{"logical operand", `{ let a = 1; print a and 2; }`, "2\n"},
 		{"call argument", `{ let a = 1; fun id(x) { return x; } print id(a); }`, "1\n"},
 		{"function expression body", `{ let a = 1; let f = fun() { return a; }; print f(); }`, "1\n"},
-		{"break in a loop", `{ let i = 0; while (true) { break; } print "broke"; }`, "broke\n"},
+		{"break in a loop", `{ while (true) { break; } print "broke"; }`, "broke\n"},
 		{"continue in a loop", `{ let i = 0; while (i < 1) { i = i + 1; continue; } print "done"; }`, "done\n"},
 	}
 

@@ -25,10 +25,37 @@ const (
 	functionFunction
 )
 
+// TODO: report an error if a local variable is never used.
+//
+// A scope has to know two things about each name now: whether its
+// initializer has been resolved (ready) and whether anything has referred
+// to it (used). The scope type goes here, and EndScope is where the check
+// belongs.
+//
+// The decisions to work out:
+//   - what counts as a use: does `a = 2` count, or only a read?
+//   - are parameters exempt? A function may legitimately ignore one.
+//   - which name to report when several are unused: map iteration order
+//     is random, so the scope needs the declaration order too.
+//
+// Then thread the error out of EndScope: it returns an error now, and both
+// VisitBlockStmt and ResolveFunction call it. ResolveFunction uses a defer,
+// so it needs the named-return idiom to report it.
+
 type Resolver struct {
 	locals          map[ast.Expression]int
-	scopes          []map[string]bool
+	scopes          []*scope
 	currentFunction functionType // which function are we in now
+}
+
+type scope struct {
+	names    []token.Token
+	enteries map[string]*scopeEntry
+}
+
+type scopeEntry struct {
+	ready bool
+	used  bool
 }
 
 var (
@@ -46,7 +73,7 @@ var (
 func New(locals map[ast.Expression]int) *Resolver {
 	return &Resolver{
 		locals: locals,
-		scopes: []map[string]bool{},
+		scopes: []*scope{},
 	}
 }
 
@@ -78,11 +105,23 @@ func (r *Resolver) ResolveExpression(expr ast.Expression) error {
 }
 
 func (r *Resolver) BeginScope() {
-	r.pushScopes(map[string]bool{})
+	r.pushScopes(&scope{enteries: map[string]*scopeEntry{}})
 }
 
-func (r *Resolver) EndScope() {
-	r.popScopes()
+func (r *Resolver) EndScope() error {
+	scope, ok := r.popScopes()
+	if !ok {
+		return nil
+	}
+
+	for _, name := range scope.names {
+		if !scope.enteries[name.Lexeme].used {
+			return errs.NewSyntaxError(
+				name.Line, name.Lexeme,
+				"Variable '"+name.Lexeme+"' is never used.")
+		}
+	}
+	return nil
 }
 
 // Declare adds the variable to the innermost scope so that it shadows
@@ -102,13 +141,19 @@ func (r *Resolver) Declare(name token.Token) error {
 		return nil
 	}
 
-	if _, ok := scope[name.Lexeme]; ok {
+	if _, ok := scope.enteries[name.Lexeme]; ok {
 		return errs.NewSyntaxError(
 			name.Line, name.Lexeme,
 			"Already a variable with this name in this scope.")
 	}
 
-	scope[name.Lexeme] = false
+	scope.enteries[name.Lexeme] = &scopeEntry{
+		false,
+		false,
+	}
+
+	scope.names = append(scope.names, name)
+
 	return nil
 }
 
@@ -121,7 +166,17 @@ func (r *Resolver) Define(name token.Token) {
 	if !ok {
 		return
 	}
-	scope[name.Lexeme] = true
+	scope.enteries[name.Lexeme].ready = true
+}
+
+// Exempt marks a name as used, so the unused check does not report it.
+// Parameters are exempt: a function may legitimately ignore one.
+func (r *Resolver) Exempt(name token.Token) {
+	scope, ok := r.peekScopes()
+	if !ok {
+		return
+	}
+	scope.enteries[name.Lexeme].used = true
 }
 
 // ResolveLocal starts at the innermost scope and works outwards, looking in
@@ -130,8 +185,11 @@ func (r *Resolver) Define(name token.Token) {
 // fall back to the environment chain at runtime.
 func (r *Resolver) ResolveLocal(expr ast.Expression, name token.Token) {
 	for i, scope := range slices.Backward(r.scopes) {
-		if _, ok := scope[name.Lexeme]; ok {
+		if _, ok := scope.enteries[name.Lexeme]; ok {
 			r.locals[expr] = len(r.scopes) - 1 - i
+
+			// mark as used
+			scope.enteries[name.Lexeme].used = true
 			return
 		}
 	}
@@ -141,29 +199,34 @@ func (r *Resolver) ResolveLocal(expr ast.Expression, name token.Token) {
 // scope. It records that we are inside a function so that return statements
 // in the body resolve correctly. Named functions declare and define their
 // name before calling this, which is what lets the body recurse.
-func (r *Resolver) ResolveFunction(parameters []token.Token, body ast.Stmt) error {
+func (r *Resolver) ResolveFunction(parameters []token.Token, body ast.Stmt) (err error) {
 	enclosingFunction := r.currentFunction
 	r.currentFunction = functionFunction
 	defer func() { r.currentFunction = enclosingFunction }()
 
 	r.BeginScope()
-	defer r.EndScope()
+	defer func() {
+		if Enderr := r.EndScope(); err == nil {
+			err = Enderr
+		}
+	}()
 
 	for _, param := range parameters {
 		if err := r.Declare(param); err != nil {
 			return err
 		}
 		r.Define(param)
+		r.Exempt(param)
 	}
 
 	return r.ResolveStatement(body)
 }
 
-func (r *Resolver) pushScopes(scope map[string]bool) {
+func (r *Resolver) pushScopes(scope *scope) {
 	r.scopes = append(r.scopes, scope)
 }
 
-func (r *Resolver) popScopes() (map[string]bool, bool) {
+func (r *Resolver) popScopes() (*scope, bool) {
 	if len(r.scopes) == 0 {
 		return nil, false
 	}
@@ -173,7 +236,7 @@ func (r *Resolver) popScopes() (map[string]bool, bool) {
 	return scope, true
 }
 
-func (r *Resolver) peekScopes() (map[string]bool, bool) {
+func (r *Resolver) peekScopes() (*scope, bool) {
 	if len(r.scopes) == 0 {
 		return nil, false
 	}

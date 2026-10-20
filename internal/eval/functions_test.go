@@ -210,7 +210,7 @@ func TestFunctionScope(t *testing.T) {
 		source string
 	}{
 		{"a parameter is not visible outside", `fun f(a) { return a; } f(1); print a;`},
-		{"a body local is not visible outside", `fun f() { let hidden = 1; } f(); print hidden;`},
+		{"a body local is not visible outside", `fun f() { let hidden = 1; return hidden; } f(); print hidden;`},
 	}
 
 	for _, tt := range tests {
@@ -228,10 +228,14 @@ func TestFunctionScope(t *testing.T) {
 // A function body sees the scope it was written in, not the one it is called
 // from. show() is declared inside a block that shadows name, then returned and
 // called from the top level.
+//
+// The outer name is read first, so the program shows both bindings: "outer"
+// is make's, and show() still gets the one it was written next to.
 func TestFunctionReadsTheScopeItWasWrittenIn(t *testing.T) {
 	got := evalPrints(t, `
 		fun make() {
 			let name = "outer";
+			print name;
 			{
 				let name = "shadowed";
 				fun show() { return name; }
@@ -240,8 +244,8 @@ func TestFunctionReadsTheScopeItWasWrittenIn(t *testing.T) {
 		}
 		print make()();`)
 
-	if got != "shadowed\n" {
-		t.Errorf("printed %q, want %q: the body must resolve 'name' where it was written", got, "shadowed\n")
+	if got != "outer\nshadowed\n" {
+		t.Errorf("printed %q, want %q: the body must resolve 'name' where it was written", got, "outer\nshadowed\n")
 	}
 }
 
@@ -251,7 +255,7 @@ func TestFunctionReadsTheScopeItWasWrittenIn(t *testing.T) {
 func TestFunctionBodyCannotSeeCallerLocals(t *testing.T) {
 	err := runProgram(t, `
 		fun peek() { return secret; }
-		{ let secret = "caller's local"; peek(); }`)
+		{ let secret = "caller's local"; print secret; peek(); }`)
 
 	if err == nil {
 		t.Fatal("want an undefined-variable error, got none")

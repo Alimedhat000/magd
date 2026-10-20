@@ -204,7 +204,7 @@ func TestInvalidAssignmentTargets(t *testing.T) {
 
 func TestBlockScopeIsLocal(t *testing.T) {
 	// A name declared inside a block does not exist outside it.
-	err := runProgram(t, `{ let q = 1; } print q;`)
+	err := runProgram(t, `{ let q = 1; print q; } print q;`)
 	if err == nil {
 		t.Fatal("want an error: q should not be visible outside its block")
 	}

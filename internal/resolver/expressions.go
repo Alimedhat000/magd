@@ -8,7 +8,7 @@ import (
 func (r *Resolver) VisitVariableExpression(expr *ast.VariableExpression) (any, error) {
 	if len(r.scopes) > 0 {
 		scope, _ := r.peekScopes()
-		if initialized, ok := scope[expr.Name.Lexeme]; ok && !initialized {
+		if entry, ok := scope.enteries[expr.Name.Lexeme]; ok && !entry.ready {
 			return nil, errs.NewSyntaxError(expr.Name.Line, expr.Name.Lexeme,
 				"Can't read local variable in its own initializer")
 		}

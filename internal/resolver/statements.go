@@ -5,11 +5,15 @@ import (
 	"magd/internal/errs"
 )
 
-func (r *Resolver) VisitBlockStmt(stmt *ast.BlockStmt) (any, error) {
+func (r *Resolver) VisitBlockStmt(stmt *ast.BlockStmt) (_ any, err error) {
 	r.BeginScope()
-	defer r.EndScope()
+	defer func() {
+		if endErr := r.EndScope(); err == nil {
+			err = endErr
+		}
+	}()
 
-	err := r.ResolveStatements(stmt.Statements)
+	err = r.ResolveStatements(stmt.Statements)
 	if err != nil {
 		return nil, err
 	}
@@ -88,9 +92,13 @@ func (r *Resolver) VisitWhileStmt(stmt *ast.WhileStmt) (any, error) {
 
 // VisitForStmt mirrors the evaluator: the initializer runs in one fresh scope
 // that the condition, body, and increment all resolve inside of too.
-func (r *Resolver) VisitForStmt(stmt *ast.ForStmt) (any, error) {
+func (r *Resolver) VisitForStmt(stmt *ast.ForStmt) (_ any, err error) {
 	r.BeginScope()
-	defer r.EndScope()
+	defer func() {
+		if endErr := r.EndScope(); err == nil {
+			err = endErr
+		}
+	}()
 
 	if stmt.Initializer != nil {
 		if err := r.ResolveStatement(stmt.Initializer); err != nil {
