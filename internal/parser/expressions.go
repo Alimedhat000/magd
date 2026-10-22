@@ -11,7 +11,7 @@ import (
 )
 
 // expression     → assignment ;
-// assignment     → IDENTIFIER "=" assignment | ternary ;
+// assignment     → (call ".")? IDENTIFIER "=" assignment | ternary ;
 // ternary        → logic_or (? expression : ternary)? ; The alternative '?' recurses rather than looping, making it right-associative.
 // logic_or       → logic_and ("or" logic_and)* ;
 // logic_and      → equality ("and" equality)* ;
@@ -20,9 +20,9 @@ import (
 // term           → factor ( ( "-" | "+" ) factor )* ;
 // factor         → unary ( ( "/" | "*" ) unary )* ;
 // unary          → ( "!" | "-" ) unary | call ;
-// call           → primary ( "(" arguments? ")" )* ;
+// call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
 // arguments      → expression ( "," expression )* ;
-// primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER | FunExpr;
+// primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER | FunExpr | "this";
 // FunExpr        → "fun" "(" primary ")" block
 
 // TODO: add support for the comma operator like in comparison
@@ -38,17 +38,23 @@ func (p *Parser) assignment() ast.Expression {
 		equals := p.previous()
 		value := p.assignment()
 
-		// Assignment's target must be a bare name. A grouping or a literal is
-		// a value, not somewhere to assign to.
-		target, ok := expr.(*ast.VariableExpression)
-		if !ok {
+		// Assignment's target must be a bare name or a property access. A
+		// grouping or a literal is a value, not somewhere to assign to.
+		switch target := expr.(type) {
+		case *ast.VariableExpression:
+			return &ast.AssignmentExpression{
+				Name:  target.Name,
+				Value: value,
+			}
+		case *ast.GetExpression:
+			return &ast.SetExpression{
+				Object: target.Object,
+				Name:   target.Name,
+				Value:  value,
+			}
+		default:
 			raise := p.error(equals, "Invalid assignment target.")
 			panic(raise)
-		}
-
-		return &ast.AssignmentExpression{
-			Name:  target.Name,
-			Value: value,
 		}
 	}
 
@@ -186,6 +192,11 @@ func (p *Parser) call() ast.Expression {
 	for {
 		if p.match(token.LEFTPAREN) {
 			expr = p.arguments(expr)
+		} else if p.match(token.DOT) {
+			name := p.consume(token.IDENT, "Expect property name after .")
+			expr = &ast.GetExpression{
+				Object: expr, Name: name,
+			}
 		} else {
 			break
 		}
@@ -257,6 +268,10 @@ func (p *Parser) primary() ast.Expression {
 
 	if p.match(token.NUMBER, token.STRING) {
 		return &ast.LiteralExpression{Value: p.previous().Literal}
+	}
+
+	if p.match(token.THIS) {
+		return &ast.ThisExpression{Keyword: p.previous()}
 	}
 
 	if p.match(token.IDENT) {

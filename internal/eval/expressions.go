@@ -239,3 +239,44 @@ func (e *Evaluator) VisitCallExpression(expr *ast.CallExpression) (any, error) {
 
 	return function.Call(e, args)
 }
+
+func (e *Evaluator) VisitGetExpression(expr *ast.GetExpression) (any, error) {
+	object, err := e.evaluate(expr.Object)
+	if err != nil {
+		return nil, err
+	}
+
+	instance, ok := object.(*Instance)
+	if !ok {
+		return nil, errs.NewRuntimeError(
+			expr.Name.Line, expr.Name.Lexeme,
+			"Only instances have properties.")
+	}
+
+	return instance.Get(expr.Name)
+}
+
+func (e *Evaluator) VisitSetExpression(expr *ast.SetExpression) (any, error) {
+	object, err := e.evaluate(expr.Object)
+	if err != nil {
+		return nil, err
+	}
+
+	instance, ok := object.(*Instance)
+	if !ok {
+		return nil, errs.NewRuntimeError(
+			expr.Name.Line, expr.Name.Lexeme,
+			"Only instances have properties.")
+	}
+
+	value, err := e.evaluate(expr.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	return instance.Set(expr.Name, value)
+}
+
+func (e *Evaluator) VisitThisExpression(expr *ast.ThisExpression) (any, error) {
+	return e.LookUpVariable(expr.Keyword, expr)
+}

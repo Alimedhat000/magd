@@ -220,6 +220,26 @@ func (v *recordingVisitor) VisitFunctionExpression(expr *FunctionExpression) (an
 	return nil, nil
 }
 
+func (v *recordingVisitor) VisitClassStmt(stmt *ClassStmt) (any, error) {
+	v.called = "classStmt"
+	return nil, nil
+}
+
+func (v *recordingVisitor) VisitGetExpression(expr *GetExpression) (any, error) {
+	v.called = "get"
+	return nil, nil
+}
+
+func (v *recordingVisitor) VisitSetExpression(expr *SetExpression) (any, error) {
+	v.called = "set"
+	return nil, nil
+}
+
+func (v *recordingVisitor) VisitThisExpression(expr *ThisExpression) (any, error) {
+	v.called = "this"
+	return nil, nil
+}
+
 func TestAcceptDispatchesToMatchingVisitMethod(t *testing.T) {
 	tests := []struct {
 		name string
@@ -236,6 +256,9 @@ func TestAcceptDispatchesToMatchingVisitMethod(t *testing.T) {
 		{"logical", &LogicalExpression{}, "logical"},
 		{"call", &CallExpression{}, "call"},
 		{"functionExpr", &FunctionExpression{}, "functionExpr"},
+		{"get", &GetExpression{}, "get"},
+		{"set", &SetExpression{}, "set"},
+		{"this", &ThisExpression{}, "this"},
 	}
 
 	for _, tt := range tests {
@@ -375,6 +398,7 @@ func TestAcceptDispatchesStatements(t *testing.T) {
 		{"forStmt", &ForStmt{}, "for"},
 		{"functionStmt", &FunctionStmt{}, "function"},
 		{"returnStmt", &ReturnStmt{}, "return"},
+		{"classStmt", &ClassStmt{}, "classStmt"},
 	}
 
 	for _, tt := range tests {
@@ -531,6 +555,66 @@ func TestPrintBlockStmt(t *testing.T) {
 				&ExpressionStmt{Expr: &LiteralExpression{Value: float64(1)}},
 			}},
 		}}, "{\n{\n1;\n}\n}\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := (&Printer{}).Print([]Stmt{tt.stmt})
+			if err != nil {
+				t.Fatalf("Print() error = %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("Print() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// A class prints as braces around its methods, one per line.
+//
+// A method has no "fun" in front of it: inside a class body the bare
+// signature is what a method declaration looks like in source.
+func TestPrintClassStmt(t *testing.T) {
+	className := token.Token{Type: token.IDENT, Lexeme: "Foo"}
+
+	tests := []struct {
+		name string
+		stmt Stmt
+		want string
+	}{
+		{"empty class", &ClassStmt{Name: className},
+			"class Foo {\n}\n"},
+		{"one method", &ClassStmt{
+			Name: className,
+			Methods: []FunctionStmt{{
+				Name: token.Token{Type: token.IDENT, Lexeme: "bar"},
+				Body: &BlockStmt{},
+			}},
+		}, "class Foo {\nbar() {\n}\n}\n"},
+		{"method with parameters", &ClassStmt{
+			Name: className,
+			Methods: []FunctionStmt{{
+				Name: token.Token{Type: token.IDENT, Lexeme: "greet"},
+				Parameters: []token.Token{
+					{Type: token.IDENT, Lexeme: "name"},
+					{Type: token.IDENT, Lexeme: "greeting"},
+				},
+				Body: &BlockStmt{},
+			}},
+		}, "class Foo {\ngreet(name, greeting) {\n}\n}\n"},
+		{"two methods", &ClassStmt{
+			Name: className,
+			Methods: []FunctionStmt{
+				{
+					Name: token.Token{Type: token.IDENT, Lexeme: "bar"},
+					Body: &BlockStmt{},
+				},
+				{
+					Name: token.Token{Type: token.IDENT, Lexeme: "baz"},
+					Body: &BlockStmt{},
+				},
+			},
+		}, "class Foo {\nbar() {\n}\nbaz() {\n}\n}\n"},
 	}
 
 	for _, tt := range tests {

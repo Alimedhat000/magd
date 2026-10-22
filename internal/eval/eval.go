@@ -198,15 +198,7 @@ func Stringify(value any) string {
 		return v
 	case bool:
 		return strconv.FormatBool(v)
-	case *Function:
-		// An anonymous function has no name to show.
-		if v.Name == "" {
-			return "<fun>"
-		}
-		return "<fun " + v.Name + ">"
-	case *NativeFunction:
-		// A native function has no Lox source to show, only its name.
-		return "<native fn>"
+
 	default:
 		return fmt.Sprintf("%v", v)
 	}

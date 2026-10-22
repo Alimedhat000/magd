@@ -87,6 +87,33 @@ func (r *Resolver) VisitCallExpression(expr *ast.CallExpression) (any, error) {
 	return nil, nil
 }
 
+func (r *Resolver) VisitGetExpression(expr *ast.GetExpression) (any, error) {
+	if err := r.ResolveExpression(expr.Object); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func (r *Resolver) VisitThisExpression(expr *ast.ThisExpression) (any, error) {
+	if !r.inClass {
+		return nil, errs.NewSyntaxError(
+			expr.Keyword.Line, expr.Keyword.Lexeme,
+			"Can't use 'this' outside of a class.")
+	}
+	r.ResolveLocal(expr, expr.Keyword)
+	return nil, nil
+}
+
+func (r *Resolver) VisitSetExpression(expr *ast.SetExpression) (any, error) {
+	if err := r.ResolveExpression(expr.Value); err != nil {
+		return nil, err
+	}
+	if err := r.ResolveExpression(expr.Object); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
 func (r *Resolver) VisitFunctionExpression(expr *ast.FunctionExpression) (any, error) {
 	if err := r.ResolveFunction(expr.Parameters, expr.Body); err != nil {
 		return nil, err

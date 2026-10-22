@@ -101,6 +101,13 @@ func (p *Printer) VisitWhileStmt(stmt *WhileStmt) (any, error) {
 // A declaration prints without a trailing ';', like if and while: the body
 // already supplies its own braces.
 func (p *Printer) VisitFunctionStmt(stmt *FunctionStmt) (any, error) {
+	return p.printFunction("fun ", stmt)
+}
+
+// printFunction prints a function's signature and body. The keyword is a
+// parameter because a method inside a class body has no "fun" in front of
+// it — the class says what it is.
+func (p *Printer) printFunction(keyword string, stmt *FunctionStmt) (any, error) {
 	var params []string
 	for _, param := range stmt.Parameters {
 		params = append(params, param.Lexeme)
@@ -111,7 +118,32 @@ func (p *Printer) VisitFunctionStmt(stmt *FunctionStmt) (any, error) {
 		return nil, err
 	}
 
-	return "fun " + stmt.Name.Lexeme + "(" + strings.Join(params, ", ") + ") " + body, nil
+	return keyword + stmt.Name.Lexeme + "(" + strings.Join(params, ", ") + ") " + body, nil
+}
+
+// classDecl → "class" IDENTIFIER "{" method* "}"
+//
+// A class prints like a block: braces around its methods, one per line. Each
+// method prints as a bare signature, so the output is the source a class
+// declaration would have been written as.
+func (p *Printer) VisitClassStmt(stmt *ClassStmt) (any, error) {
+	var builder strings.Builder
+
+	builder.WriteString("class " + stmt.Name.Lexeme + " {\n")
+
+	for i := range stmt.Methods {
+		method, err := p.printFunction("", &stmt.Methods[i])
+		if err != nil {
+			return nil, err
+		}
+
+		builder.WriteString(method.(string))
+		builder.WriteString("\n")
+	}
+
+	builder.WriteString("}")
+
+	return builder.String(), nil
 }
 
 // returnStmt → "return" expression? ";"
@@ -173,6 +205,34 @@ func (p *Printer) VisitCallExpression(expr *CallExpression) (any, error) {
 	}
 
 	return "(" + callee + " " + strings.Join(args, ", ") + ")", nil
+}
+
+func (p *Printer) VisitGetExpression(expr *GetExpression) (any, error) {
+	object, err := p.printExpression(expr.Object)
+	if err != nil {
+		return nil, err
+	}
+
+	return "(" + object + "." + expr.Name.Lexeme + ")", nil
+}
+
+func (p *Printer) VisitSetExpression(expr *SetExpression) (any, error) {
+	object, err := p.printExpression(expr.Object)
+	if err != nil {
+		return nil, err
+	}
+
+	value, err := p.printExpression(expr.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	return "(= " + object + "." + expr.Name.Lexeme + " " + value + ")", nil
+}
+
+// this → "this"
+func (p *Printer) VisitThisExpression(expr *ThisExpression) (any, error) {
+	return expr.Keyword.Lexeme, nil
 }
 
 func (p *Printer) VisitForStmt(stmt *ForStmt) (any, error) {

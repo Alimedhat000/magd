@@ -17,14 +17,6 @@ import (
 	"magd/internal/token"
 )
 
-// functionType is a two-state flag that answers one question: "am I inside a function body right now?"
-type functionType int
-
-const (
-	functionNone functionType = iota
-	functionFunction
-)
-
 // TODO: report an error if a local variable is never used.
 //
 // A scope has to know two things about each name now: whether its
@@ -43,9 +35,14 @@ const (
 // so it needs the named-return idiom to report it.
 
 type Resolver struct {
-	locals          map[ast.Expression]int
-	scopes          []*scope
-	currentFunction functionType // which function are we in now
+	locals map[ast.Expression]int
+	scopes []*scope
+	// inFunction is true while resolving a function or method body. A
+	// "return" is only legal there.
+	inFunction bool
+	// inClass is true while resolving a class body. A "this" is only legal
+	// there.
+	inClass bool
 }
 
 type scope struct {
@@ -200,9 +197,9 @@ func (r *Resolver) ResolveLocal(expr ast.Expression, name token.Token) {
 // in the body resolve correctly. Named functions declare and define their
 // name before calling this, which is what lets the body recurse.
 func (r *Resolver) ResolveFunction(parameters []token.Token, body ast.Stmt) (err error) {
-	enclosingFunction := r.currentFunction
-	r.currentFunction = functionFunction
-	defer func() { r.currentFunction = enclosingFunction }()
+	enclosing := r.inFunction
+	r.inFunction = true
+	defer func() { r.inFunction = enclosing }()
 
 	r.BeginScope()
 	defer func() {
@@ -220,6 +217,18 @@ func (r *Resolver) ResolveFunction(parameters []token.Token, body ast.Stmt) (err
 	}
 
 	return r.ResolveStatement(body)
+}
+
+// declareThis adds "this" to the innermost scope. It is ready, and exempt
+// from the unused check
+func (r *Resolver) declareThis() error {
+	this := token.Token{Type: token.THIS, Lexeme: "this"}
+	if err := r.Declare(this); err != nil {
+		return err
+	}
+	r.Define(this)
+	r.Exempt(this)
+	return nil
 }
 
 func (r *Resolver) pushScopes(scope *scope) {

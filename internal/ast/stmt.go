@@ -20,6 +20,7 @@ type StmtVisitor interface {
 	VisitContinueStmt(stmt *ContinueStmt) (any, error)
 	VisitFunctionStmt(stmt *FunctionStmt) (any, error)
 	VisitReturnStmt(stmt *ReturnStmt) (any, error)
+	VisitClassStmt(stmt *ClassStmt) (any, error)
 }
 
 type (
@@ -75,6 +76,11 @@ type (
 		Keyword token.Token
 		Value   Expression
 	}
+
+	ClassStmt struct {
+		Name    token.Token
+		Methods []FunctionStmt
+	}
 )
 
 func (stmt *ExpressionStmt) Accept(visitor StmtVisitor) (any, error) {
@@ -119,4 +125,8 @@ func (stmt *FunctionStmt) Accept(visitor StmtVisitor) (any, error) {
 
 func (stmt *ReturnStmt) Accept(visitor StmtVisitor) (any, error) {
 	return visitor.VisitReturnStmt(stmt)
+}
+
+func (stmt *ClassStmt) Accept(visitor StmtVisitor) (any, error) {
+	return visitor.VisitClassStmt(stmt)
 }

@@ -195,3 +195,30 @@ func (e *Evaluator) VisitFunctionStmt(stmt *ast.FunctionStmt) (any, error) {
 
 	return nil, nil
 }
+
+func (e *Evaluator) VisitClassStmt(stmt *ast.ClassStmt) (any, error) {
+	e.environment.Define(stmt.Name.Lexeme, nil)
+
+	methods := map[string]*Function{}
+
+	for _, m := range stmt.Methods {
+		methods[m.Name.Lexeme] = &Function{
+			Name:          m.Name.Lexeme,
+			Parameters:    m.Parameters,
+			Body:          m.Body,
+			Closure:       e.environment,
+			isInitializer: m.Name.Lexeme == "init",
+		}
+	}
+
+	class := &Class{
+		Name:    stmt.Name.Lexeme,
+		Methods: methods,
+	}
+
+	if _, err := e.environment.Assign(stmt.Name, class); err != nil {
+		return nil, err
+	}
+
+	return nil, nil
+}

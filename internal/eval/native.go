@@ -23,3 +23,7 @@ func clock(_ *Evaluator, _ []any) (any, error) {
 	now := time.Now()
 	return float64(now.Unix()) + float64(now.Nanosecond())/1e9, nil
 }
+
+func (f *NativeFunction) String() string {
+	return "<native fn>"
+}

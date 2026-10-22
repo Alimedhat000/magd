@@ -11,7 +11,7 @@ import (
 	"magd/internal/token"
 )
 
-// declaration    → FunDecl | LetDecl | statement ;
+// declaration    → FunDecl | LetDecl | classDecl |statement ;
 // statement      → exprStmt | printStmt | ifStmt | whileStmt | forStmt | returnStmt | block ;
 // returnStmt     → "return" expression? ";" ;
 // ifStmt         → "if" "(" expression ")" statement ("else" statement)? ; this way we can chain if to else if as if is a stmt
@@ -21,6 +21,7 @@ import (
 // printStmt      → "print" expression ";" ;
 // variableDecl   → "let" IDENTIFIER ( "=" expression)? ";" ;
 // FunDecl        → "fun" function ;
+// classDecl      → "class" IDENTIFIER "{" function* "}"
 // function       → IDENTIFIER "(" parameters? ")" block ;
 // parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
 // block          → "{" declaration* "}";
@@ -46,6 +47,10 @@ func (p *Parser) declaration() (d ast.Stmt) {
 	if p.check(token.FUNCTION) && p.checkNext(token.IDENT) {
 		p.advance() // consume "fun"
 		return p.funDeclaration()
+	}
+
+	if p.match(token.CLASS) {
+		return p.classDeclaration()
 	}
 
 	return p.statement()
@@ -207,7 +212,23 @@ func (p *Parser) ifStatement() ast.Stmt {
 	}
 }
 
-func (p *Parser) funDeclaration() ast.Stmt {
+func (p *Parser) classDeclaration() *ast.ClassStmt {
+	name := p.consume(token.IDENT, "Expect class name.")
+
+	p.consume(token.LEFTBRACE, "Expect { before class body.")
+
+	var methods []ast.FunctionStmt
+
+	for !p.check(token.RIGHTBRACE) && !p.isAtEnd() {
+		methods = append(methods, *p.funDeclaration())
+	}
+
+	p.consume(token.RIGHTBRACE, "Expect } after class body.")
+
+	return &ast.ClassStmt{Name: name, Methods: methods}
+}
+
+func (p *Parser) funDeclaration() *ast.FunctionStmt {
 	name := p.consume(token.IDENT, "Expect function name.")
 
 	p.consume(token.LEFTPAREN, "Expect ( after a function name.")

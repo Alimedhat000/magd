@@ -32,6 +32,9 @@ type ExprVisitor interface {
 	VisitAssignmentExpression(expr *AssignmentExpression) (any, error)
 	VisitLogicalExpression(expr *LogicalExpression) (any, error)
 	VisitCallExpression(expr *CallExpression) (any, error)
+	VisitGetExpression(expr *GetExpression) (any, error)
+	VisitSetExpression(expr *SetExpression) (any, error)
+	VisitThisExpression(expr *ThisExpression) (any, error)
 	VisitFunctionExpression(expr *FunctionExpression) (any, error)
 }
 
@@ -83,6 +86,21 @@ type CallExpression struct {
 	Arguments   []Expression
 }
 
+type GetExpression struct {
+	Object Expression
+	Name   token.Token
+}
+
+type SetExpression struct {
+	Object Expression
+	Name   token.Token
+	Value  Expression
+}
+
+type ThisExpression struct {
+	Keyword token.Token
+}
+
 type FunctionExpression struct {
 	Parenthesis token.Token
 	Parameters  []token.Token
@@ -123,6 +141,18 @@ func (expr *LogicalExpression) Accept(visitor ExprVisitor) (any, error) {
 
 func (expr *CallExpression) Accept(visitor ExprVisitor) (any, error) {
 	return visitor.VisitCallExpression(expr)
+}
+
+func (expr *GetExpression) Accept(visitor ExprVisitor) (any, error) {
+	return visitor.VisitGetExpression(expr)
+}
+
+func (expr *SetExpression) Accept(visitor ExprVisitor) (any, error) {
+	return visitor.VisitSetExpression(expr)
+}
+
+func (expr *ThisExpression) Accept(visitor ExprVisitor) (any, error) {
+	return visitor.VisitThisExpression(expr)
 }
 
 func (expr *FunctionExpression) Accept(visitor ExprVisitor) (any, error) {
