@@ -240,6 +240,11 @@ func (v *recordingVisitor) VisitThisExpression(expr *ThisExpression) (any, error
 	return nil, nil
 }
 
+func (v *recordingVisitor) VisitSuperExpression(expr *SuperExpression) (any, error) {
+	v.called = "super"
+	return nil, nil
+}
+
 func TestAcceptDispatchesToMatchingVisitMethod(t *testing.T) {
 	tests := []struct {
 		name string
@@ -259,6 +264,7 @@ func TestAcceptDispatchesToMatchingVisitMethod(t *testing.T) {
 		{"get", &GetExpression{}, "get"},
 		{"set", &SetExpression{}, "set"},
 		{"this", &ThisExpression{}, "this"},
+		{"super", &SuperExpression{}, "super"},
 	}
 
 	for _, tt := range tests {
@@ -615,6 +621,19 @@ func TestPrintClassStmt(t *testing.T) {
 				},
 			},
 		}, "class Foo {\nbar() {\n}\nbaz() {\n}\n}\n"},
+		{"subclass with override", &ClassStmt{
+			Name:       token.Token{Type: token.IDENT, Lexeme: "Dog"},
+			SuperClass: &VariableExpression{Name: token.Token{Type: token.IDENT, Lexeme: "Animal"}},
+			Methods: []FunctionStmt{{
+				Name: token.Token{Type: token.IDENT, Lexeme: "speak"},
+				Body: &BlockStmt{Statements: []Stmt{
+					&ReturnStmt{Value: &SuperExpression{
+						Keyword: token.Token{Type: token.SUPER, Lexeme: "super"},
+						Method:  token.Token{Type: token.IDENT, Lexeme: "speak"},
+					}},
+				}},
+			}},
+		}, "class Dog < Animal {\nspeak() {\nreturn super.speak;\n}\n}\n"},
 	}
 
 	for _, tt := range tests {

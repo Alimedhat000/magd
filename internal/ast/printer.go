@@ -121,15 +121,16 @@ func (p *Printer) printFunction(keyword string, stmt *FunctionStmt) (any, error)
 	return keyword + stmt.Name.Lexeme + "(" + strings.Join(params, ", ") + ") " + body, nil
 }
 
-// classDecl → "class" IDENTIFIER "{" method* "}"
-//
-// A class prints like a block: braces around its methods, one per line. Each
-// method prints as a bare signature, so the output is the source a class
-// declaration would have been written as.
 func (p *Printer) VisitClassStmt(stmt *ClassStmt) (any, error) {
 	var builder strings.Builder
 
-	builder.WriteString("class " + stmt.Name.Lexeme + " {\n")
+	builder.WriteString("class " + stmt.Name.Lexeme)
+
+	if stmt.SuperClass != nil {
+		builder.WriteString(" < " + stmt.SuperClass.Name.Lexeme)
+	}
+
+	builder.WriteString(" {\n")
 
 	for i := range stmt.Methods {
 		method, err := p.printFunction("", &stmt.Methods[i])
@@ -235,8 +236,9 @@ func (p *Printer) VisitThisExpression(expr *ThisExpression) (any, error) {
 	return expr.Keyword.Lexeme, nil
 }
 
+// super → "super" "." IDENTIFIER
 func (p *Printer) VisitSuperExpression(expr *SuperExpression) (any, error) {
-	return expr.Keyword.Lexeme, nil
+	return expr.Keyword.Lexeme + "." + expr.Method.Lexeme, nil
 }
 
 func (p *Printer) VisitForStmt(stmt *ForStmt) (any, error) {
