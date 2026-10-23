@@ -197,7 +197,33 @@ func (e *Evaluator) VisitFunctionStmt(stmt *ast.FunctionStmt) (any, error) {
 }
 
 func (e *Evaluator) VisitClassStmt(stmt *ast.ClassStmt) (any, error) {
+	var superClass *Class
+	if stmt.SuperClass != nil {
+		value, err := e.evaluate(stmt.SuperClass)
+		if err != nil {
+			return nil, err
+		}
+
+		ok := false
+		superClass, ok = value.(*Class)
+		if !ok {
+			return nil, errs.NewRuntimeError(
+				stmt.SuperClass.Name.Line, stmt.SuperClass.Name.Lexeme,
+				"SuperClass must be a class.")
+		}
+	}
+
 	e.environment.Define(stmt.Name.Lexeme, nil)
+
+	if stmt.SuperClass != nil {
+		enclosing := e.environment
+		e.environment = env.NewEnvironmentEnclosing(enclosing)
+		defer func() {
+			e.environment = enclosing
+		}()
+		e.environment.Define("super", superClass)
+
+	}
 
 	methods := map[string]*Function{}
 
@@ -210,10 +236,10 @@ func (e *Evaluator) VisitClassStmt(stmt *ast.ClassStmt) (any, error) {
 			isInitializer: m.Name.Lexeme == "init",
 		}
 	}
-
 	class := &Class{
-		Name:    stmt.Name.Lexeme,
-		Methods: methods,
+		Name:       stmt.Name.Lexeme,
+		Methods:    methods,
+		SuperClass: superClass,
 	}
 
 	if _, err := e.environment.Assign(stmt.Name, class); err != nil {

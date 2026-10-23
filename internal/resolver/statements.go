@@ -53,8 +53,13 @@ func (r *Resolver) VisitFunctionStmt(stmt *ast.FunctionStmt) (any, error) {
 
 func (r *Resolver) VisitClassStmt(stmt *ast.ClassStmt) (any, error) {
 	enclosing := r.inClass
+	enclosingSuper := r.hasSuperClass
 	r.inClass = true
-	defer func() { r.inClass = enclosing }()
+	r.hasSuperClass = stmt.SuperClass != nil
+	defer func() {
+		r.inClass = enclosing
+		r.hasSuperClass = enclosingSuper
+	}()
 
 	err := r.Declare(stmt.Name)
 	if err != nil {
@@ -62,6 +67,29 @@ func (r *Resolver) VisitClassStmt(stmt *ast.ClassStmt) (any, error) {
 	}
 
 	r.Define(stmt.Name)
+
+	if stmt.SuperClass != nil && stmt.Name.Lexeme == stmt.SuperClass.Name.Lexeme {
+		return nil, errs.NewSyntaxError(
+			stmt.SuperClass.Name.Line, stmt.SuperClass.Name.Lexeme,
+			"A class cannot inherit from itself.")
+	}
+
+	if stmt.SuperClass != nil {
+		if err = r.ResolveExpression(stmt.SuperClass); err != nil {
+			return nil, err
+		}
+
+		r.BeginScope()
+		defer func() {
+			if endErr := r.EndScope(); err == nil {
+				err = endErr
+			}
+		}()
+
+		if err = r.declareSuper(); err != nil {
+			return nil, err
+		}
+	}
 
 	r.BeginScope()
 	defer func() {

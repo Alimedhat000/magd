@@ -235,6 +235,10 @@ func (p *Printer) VisitThisExpression(expr *ThisExpression) (any, error) {
 	return expr.Keyword.Lexeme, nil
 }
 
+func (p *Printer) VisitSuperExpression(expr *SuperExpression) (any, error) {
+	return expr.Keyword.Lexeme, nil
+}
+
 func (p *Printer) VisitForStmt(stmt *ForStmt) (any, error) {
 	var condition string = ""
 	var initializer string = ""

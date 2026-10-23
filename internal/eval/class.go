@@ -37,8 +37,9 @@ func (i *Instance) Set(name token.Token, value any) (any, error) {
 func (i *Instance) String() string { return i.class.Name + " instance" }
 
 type Class struct {
-	Name    string
-	Methods map[string]*Function
+	Name       string
+	Methods    map[string]*Function
+	SuperClass *Class
 }
 
 func (c *Class) Arity() int {
@@ -62,7 +63,14 @@ func (c *Class) Call(e *Evaluator, args []any) (any, error) {
 }
 
 func (c *Class) FindMethod(name string) *Function {
-	return c.Methods[name]
+	if m := c.Methods[name]; m != nil {
+		return m
+	}
+
+	if c.SuperClass != nil {
+		return c.SuperClass.FindMethod(name)
+	}
+	return nil
 }
 
 func (c *Class) String() string { return c.Name + " Class" }

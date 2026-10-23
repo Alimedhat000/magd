@@ -280,3 +280,35 @@ func (e *Evaluator) VisitSetExpression(expr *ast.SetExpression) (any, error) {
 func (e *Evaluator) VisitThisExpression(expr *ast.ThisExpression) (any, error) {
 	return e.LookUpVariable(expr.Keyword, expr)
 }
+
+func (e *Evaluator) VisitSuperExpression(expr *ast.SuperExpression) (any, error) {
+	distance, ok := e.Locals[expr]
+	if !ok {
+		return nil, fmt.Errorf("resolver did not record a distance for 'super'")
+	}
+
+	// find the super class
+	value, err := e.environment.GetAt(distance, expr.Keyword) // "super"
+	if err != nil {
+		return nil, err
+	}
+	superClass := value.(*Class)
+
+	// find this class
+	this, err := e.environment.GetAt(distance-1,
+		token.Token{Type: token.THIS, Lexeme: "this"})
+	if err != nil {
+		return nil, err
+	}
+
+	// find the method in the superclass
+	method := superClass.FindMethod(expr.Method.Lexeme)
+	if method == nil {
+		return nil, errs.NewRuntimeError(
+			expr.Method.Line, expr.Method.Lexeme,
+			"Undefined property '"+expr.Method.Lexeme+"'.")
+	}
+
+	// bind the method to this class
+	return method.Bind(this.(*Instance)), nil
+}

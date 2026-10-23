@@ -78,8 +78,9 @@ type (
 	}
 
 	ClassStmt struct {
-		Name    token.Token
-		Methods []FunctionStmt
+		Name       token.Token
+		Methods    []FunctionStmt
+		SuperClass *VariableExpression
 	}
 )
 

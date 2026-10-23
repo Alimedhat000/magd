@@ -104,6 +104,21 @@ func (r *Resolver) VisitThisExpression(expr *ast.ThisExpression) (any, error) {
 	return nil, nil
 }
 
+func (r *Resolver) VisitSuperExpression(expr *ast.SuperExpression) (any, error) {
+	if !r.inClass {
+		return nil, errs.NewSyntaxError(
+			expr.Keyword.Line, expr.Keyword.Lexeme,
+			"Can't use 'super' outside of a class.")
+	}
+	if !r.hasSuperClass {
+		return nil, errs.NewSyntaxError(
+			expr.Keyword.Line, expr.Keyword.Lexeme,
+			"Can't use 'super' in a class with no superclass.")
+	}
+	r.ResolveLocal(expr, expr.Keyword)
+	return nil, nil
+}
+
 func (r *Resolver) VisitSetExpression(expr *ast.SetExpression) (any, error) {
 	if err := r.ResolveExpression(expr.Value); err != nil {
 		return nil, err

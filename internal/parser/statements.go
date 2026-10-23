@@ -21,7 +21,7 @@ import (
 // printStmt      → "print" expression ";" ;
 // variableDecl   → "let" IDENTIFIER ( "=" expression)? ";" ;
 // FunDecl        → "fun" function ;
-// classDecl      → "class" IDENTIFIER "{" function* "}"
+// classDecl      → "class" IDENTIFIER ( "<" IDENTIFIER)? "{" function* "} ;
 // function       → IDENTIFIER "(" parameters? ")" block ;
 // parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
 // block          → "{" declaration* "}";
@@ -215,6 +215,13 @@ func (p *Parser) ifStatement() ast.Stmt {
 func (p *Parser) classDeclaration() *ast.ClassStmt {
 	name := p.consume(token.IDENT, "Expect class name.")
 
+	var superclass *ast.VariableExpression
+
+	if p.match(token.LESS) {
+		p.consume(token.IDENT, "Expect superclass name.")
+		superclass = &ast.VariableExpression{Name: p.previous()}
+	}
+
 	p.consume(token.LEFTBRACE, "Expect { before class body.")
 
 	var methods []ast.FunctionStmt
@@ -225,7 +232,7 @@ func (p *Parser) classDeclaration() *ast.ClassStmt {
 
 	p.consume(token.RIGHTBRACE, "Expect } after class body.")
 
-	return &ast.ClassStmt{Name: name, Methods: methods}
+	return &ast.ClassStmt{Name: name, Methods: methods, SuperClass: superclass}
 }
 
 func (p *Parser) funDeclaration() *ast.FunctionStmt {

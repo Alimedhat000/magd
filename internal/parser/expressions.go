@@ -22,7 +22,7 @@ import (
 // unary          → ( "!" | "-" ) unary | call ;
 // call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
 // arguments      → expression ( "," expression )* ;
-// primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER | FunExpr | "this";
+// primary        → NUMBER | STRING | "true" | "false" | "nil" | "(" expression ")" | IDENTIFIER | FunExpr | "this" | "super" "." IDENTIFIER;
 // FunExpr        → "fun" "(" primary ")" block
 
 // TODO: add support for the comma operator like in comparison
@@ -272,6 +272,13 @@ func (p *Parser) primary() ast.Expression {
 
 	if p.match(token.THIS) {
 		return &ast.ThisExpression{Keyword: p.previous()}
+	}
+
+	if p.match(token.SUPER) {
+		keyword := p.previous()
+		p.consume(token.DOT, "Expect '.' after 'super'.")
+		method := p.consume(token.IDENT, "Expect Superclass method name.")
+		return &ast.SuperExpression{Keyword: keyword, Method: method}
 	}
 
 	if p.match(token.IDENT) {

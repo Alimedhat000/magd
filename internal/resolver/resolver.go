@@ -42,7 +42,8 @@ type Resolver struct {
 	inFunction bool
 	// inClass is true while resolving a class body. A "this" is only legal
 	// there.
-	inClass bool
+	inClass       bool
+	hasSuperClass bool
 }
 
 type scope struct {
@@ -228,6 +229,16 @@ func (r *Resolver) declareThis() error {
 	}
 	r.Define(this)
 	r.Exempt(this)
+	return nil
+}
+
+func (r *Resolver) declareSuper() error {
+	super := token.Token{Type: token.SUPER, Lexeme: "super"}
+	if err := r.Declare(super); err != nil {
+		return err
+	}
+	r.Define(super)
+	r.Exempt(super)
 	return nil
 }
 

@@ -35,6 +35,7 @@ type ExprVisitor interface {
 	VisitGetExpression(expr *GetExpression) (any, error)
 	VisitSetExpression(expr *SetExpression) (any, error)
 	VisitThisExpression(expr *ThisExpression) (any, error)
+	VisitSuperExpression(expr *SuperExpression) (any, error)
 	VisitFunctionExpression(expr *FunctionExpression) (any, error)
 }
 
@@ -101,6 +102,11 @@ type ThisExpression struct {
 	Keyword token.Token
 }
 
+type SuperExpression struct {
+	Keyword token.Token
+	Method  token.Token
+}
+
 type FunctionExpression struct {
 	Parenthesis token.Token
 	Parameters  []token.Token
@@ -153,6 +159,10 @@ func (expr *SetExpression) Accept(visitor ExprVisitor) (any, error) {
 
 func (expr *ThisExpression) Accept(visitor ExprVisitor) (any, error) {
 	return visitor.VisitThisExpression(expr)
+}
+
+func (expr *SuperExpression) Accept(visitor ExprVisitor) (any, error) {
+	return visitor.VisitSuperExpression(expr)
 }
 
 func (expr *FunctionExpression) Accept(visitor ExprVisitor) (any, error) {
