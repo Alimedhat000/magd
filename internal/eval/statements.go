@@ -209,7 +209,7 @@ func (e *Evaluator) VisitClassStmt(stmt *ast.ClassStmt) (any, error) {
 		if !ok {
 			return nil, errs.NewRuntimeError(
 				stmt.SuperClass.Name.Line, stmt.SuperClass.Name.Lexeme,
-				"SuperClass must be a class.")
+				"Superclass must be a class.")
 		}
 	}
 

@@ -158,6 +158,11 @@ func (e *Evaluator) isEqual(left any, right any) bool {
 		return false
 	}
 
+	// make sure both are comparable, so instances, classes, and functions are only equal
+	// when they are the same object.
+	if reflect.TypeOf(left).Comparable() && reflect.TypeOf(right).Comparable() {
+		return left == right
+	}
 	return reflect.DeepEqual(left, right)
 }
 
