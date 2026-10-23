@@ -45,7 +45,7 @@ func (r *Resolver) VisitFunctionStmt(stmt *ast.FunctionStmt) (any, error) {
 	}
 	r.Define(stmt.Name)
 
-	if err := r.ResolveFunction(stmt.Parameters, stmt.Body); err != nil {
+	if err := r.ResolveFunction(stmt.Parameters, stmt.Body, false); err != nil {
 		return nil, err
 	}
 	return nil, nil
@@ -103,7 +103,7 @@ func (r *Resolver) VisitClassStmt(stmt *ast.ClassStmt) (any, error) {
 	}
 
 	for _, m := range stmt.Methods {
-		if err := r.ResolveFunction(m.Parameters, m.Body); err != nil {
+		if err := r.ResolveFunction(m.Parameters, m.Body, m.Name.Lexeme == "init"); err != nil {
 			return nil, err
 		}
 	}
@@ -194,6 +194,12 @@ func (r *Resolver) VisitReturnStmt(stmt *ast.ReturnStmt) (any, error) {
 	}
 
 	if stmt.Value != nil {
+		if r.inInitializer {
+			return nil, errs.NewSyntaxError(
+				stmt.Keyword.Line, stmt.Keyword.Lexeme,
+				"Can't return a value from an initializer.")
+		}
+
 		if err := r.ResolveExpression(stmt.Value); err != nil {
 			return nil, err
 		}

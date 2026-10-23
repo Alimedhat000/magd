@@ -130,7 +130,7 @@ func (r *Resolver) VisitSetExpression(expr *ast.SetExpression) (any, error) {
 }
 
 func (r *Resolver) VisitFunctionExpression(expr *ast.FunctionExpression) (any, error) {
-	if err := r.ResolveFunction(expr.Parameters, expr.Body); err != nil {
+	if err := r.ResolveFunction(expr.Parameters, expr.Body, false); err != nil {
 		return nil, err
 	}
 	return nil, nil

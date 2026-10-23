@@ -44,6 +44,7 @@ type Resolver struct {
 	// there.
 	inClass       bool
 	hasSuperClass bool
+	inInitializer bool
 }
 
 type scope struct {
@@ -195,12 +196,18 @@ func (r *Resolver) ResolveLocal(expr ast.Expression, name token.Token) {
 
 // ResolveFunction resolves the parameters and body of a function in a fresh
 // scope. It records that we are inside a function so that return statements
-// in the body resolve correctly. Named functions declare and define their
-// name before calling this, which is what lets the body recurse.
-func (r *Resolver) ResolveFunction(parameters []token.Token, body ast.Stmt) (err error) {
+// in the body resolve correctly, and whether the function is an initializer,
+// where a return with a value is illegal. Named functions declare and define
+// their name before calling this, which is what lets the body recurse.
+func (r *Resolver) ResolveFunction(parameters []token.Token, body ast.Stmt, isInitializer bool) (err error) {
 	enclosing := r.inFunction
+	enclosingInitializer := r.inInitializer
 	r.inFunction = true
-	defer func() { r.inFunction = enclosing }()
+	r.inInitializer = isInitializer
+	defer func() {
+		r.inFunction = enclosing
+		r.inInitializer = enclosingInitializer
+	}()
 
 	r.BeginScope()
 	defer func() {
